@@ -1,7 +1,9 @@
 "use client";
 
-import { useState } from "react";
-import { GripVertical, Plus, Trash2 } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
+import { GripVertical, Plus, Star, Trash2, X } from "lucide-react";
+import { checkFile, FileDrop, uploadOne } from "./image-manager";
 import { saveProductAction } from "@/server/admin/products";
 import type { FormState } from "@/server/account-actions";
 import { Field, FormMessage, Input, Select, SubmitButton, Textarea, useFormAction } from "@/components/ui/form";
@@ -34,6 +36,9 @@ export type ProductFormValues = {
   attributes: Attr[];
   equivalents: string;
   compatibles: string;
+  dimensions: string;
+  /** Quantité physique dans le dépôt principal (vide = ne pas modifier). */
+  stockQty: string;
 };
 
 const num = (v: string) => (v.trim() === "" ? null : Number(v.replace(",", ".")));
@@ -50,8 +55,46 @@ function Margin({ cost, price }: { cost: string; price: string }) {
   );
 }
 
-export function ProductForm({ values, categories, brands, canPublish, canSeeCost }: { values: ProductFormValues; categories: Option[]; brands: Option[]; canPublish: boolean; canSeeCost: boolean }) {
+type Queued = { key: string; file: File; preview: string };
+
+export function ProductForm({ values, categories, brands, canPublish, canSeeCost, canAdjustStock, warehouseName }: { values: ProductFormValues; categories: Option[]; brands: Option[]; canPublish: boolean; canSeeCost: boolean; canAdjustStock: boolean; warehouseName: string | null }) {
   const [state, onSubmit, pending] = useFormAction<FormState>(saveProductAction, { status: "idle" });
+  const router = useRouter();
+  const [queued, setQueued] = useState<Queued[]>([]);
+  const [queueMsg, setQueueMsg] = useState<string | null>(null);
+  const [sending, setSending] = useState<string | null>(null);
+  const done = useRef(false);
+
+  // Création : une fois la fiche enregistrée, les photos choisies sont envoyées une par une, puis on ouvre la fiche.
+  const createdId = state.status === "success" ? state.data?.id : undefined;
+  useEffect(() => {
+    if (!createdId || done.current) return;
+    done.current = true;
+    (async () => {
+      const errors: string[] = [];
+      for (const [i, q] of queued.entries()) {
+        setSending(`Envoi des photos ${i + 1}/${queued.length}…`);
+        const r = await uploadOne(Number(createdId), q.file);
+        if (!r.ok) errors.push(r.message);
+      }
+      const ignored = Number(state.status === "success" ? state.data?.ignored : 0) || 0;
+      const base = ignored ? `Produit créé. ${ignored} référence(s) liée(s) inconnue(s) ignorée(s).` : "Produit créé.";
+      const msg = errors.length ? `${base} ${errors.length} photo(s) refusée(s) : ${errors.join(" ")}` : base;
+      router.push(`/admin/produits/${createdId}?${errors.length ? "erreur" : "ok"}=${encodeURIComponent(msg)}`);
+    })();
+  }, [createdId]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const queueFiles = (files: File[]) => {
+    const errs: string[] = [];
+    const ok: Queued[] = [];
+    for (const f of files) {
+      const e = checkFile(f);
+      if (e) errs.push(e);
+      else ok.push({ key: `${f.name}-${f.size}-${Math.random()}`, file: f, preview: URL.createObjectURL(f) });
+    }
+    setQueueMsg(errs.length ? errs.join(" ") : null);
+    setQueued((q) => [...q, ...ok]);
+  };
   const [prices, setPrices] = useState({ purchase: values.purchasePrice, sale: values.salePrice, pro: values.proPrice, vat: values.vatRate });
   const [attrs, setAttrs] = useState<Attr[]>(values.attributes);
   const err = (k: string) => (state.status === "error" ? state.fieldErrors?.[k]?.[0] : undefined);
@@ -92,14 +135,36 @@ export function ProductForm({ values, categories, brands, canPublish, canSeeCost
           </div>
         </section>
 
+        {!values.id && (
+          <section className="rounded-xl border border-line bg-white p-5">
+            <h2 className="mb-1 text-sm font-semibold">Photos</h2>
+            <p className="mb-4 text-xs text-steel">La première photo sera l&apos;image principale. Vous pourrez ensuite réordonner, remplacer ou supprimer les photos depuis la fiche.</p>
+            {queued.length > 0 && (
+              <ul className="mb-3 grid grid-cols-3 gap-3 sm:grid-cols-5">
+                {queued.map((q, i) => (
+                  <li key={q.key} className={`relative aspect-square overflow-hidden rounded-lg border bg-mist ${i === 0 ? "border-accent" : "border-line"}`}>
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img src={q.preview} alt="" className="size-full object-contain p-1" />
+                    {i === 0 && <span className="absolute bottom-1 left-1 rounded bg-accent px-1 text-[10px] font-semibold text-white">Principale</span>}
+                    <div className="absolute top-1 right-1 flex gap-1">
+                      {i > 0 && <button type="button" aria-label="Choisir comme principale" onClick={() => setQueued((l) => [l[i], ...l.filter((_, j) => j !== i)])} className="grid size-6 place-items-center rounded bg-white/90"><Star className="size-3.5" /></button>}
+                      <button type="button" aria-label="Retirer la photo" onClick={() => { URL.revokeObjectURL(q.preview); setQueued((l) => l.filter((_, j) => j !== i)); }} className="grid size-6 place-items-center rounded bg-white/90 text-danger"><X className="size-3.5" /></button>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            )}
+            <FileDrop onFiles={queueFiles} compact />
+            {queueMsg && <p className="mt-2 text-sm text-danger">{queueMsg}</p>}
+          </section>
+        )}
+
         <section className="rounded-xl border border-line bg-white p-5">
           <h2 className="mb-4 text-sm font-semibold">Prix (HT, en dinars)</h2>
           <div className="grid gap-4 sm:grid-cols-3">
             {canSeeCost ? (
               <Field label="Prix d'achat" optional error={err("purchasePrice")}><Input name="purchasePrice" defaultValue={values.purchasePrice} inputMode="decimal" onChange={(e) => setPrices((p) => ({ ...p, purchase: e.target.value }))} invalid={!!err("purchasePrice")} /></Field>
-            ) : (
-              <input type="hidden" name="purchasePrice" value={values.purchasePrice} />
-            )}
+            ) : null}
             <Field label="Prix de vente public" error={err("salePrice")} hint={`TTC : ${ttc(prices.sale)}`}><Input name="salePrice" defaultValue={values.salePrice} inputMode="decimal" onChange={(e) => setPrices((p) => ({ ...p, sale: e.target.value }))} invalid={!!err("salePrice")} /></Field>
             <Field label="Prix professionnel" optional error={err("proPrice")} hint={`TTC : ${ttc(prices.pro)}`}><Input name="proPrice" defaultValue={values.proPrice} inputMode="decimal" onChange={(e) => setPrices((p) => ({ ...p, pro: e.target.value }))} invalid={!!err("proPrice")} /></Field>
             <Field label="TVA">
@@ -109,6 +174,7 @@ export function ProductForm({ values, categories, brands, canPublish, canSeeCost
             </Field>
             <Field label="Unité de vente"><Input name="unit" defaultValue={values.unit} list="units" /></Field>
             <Field label="Poids (kg)" optional><Input name="weightKg" defaultValue={values.weightKg} inputMode="decimal" /></Field>
+            <Field label="Dimensions" optional hint="Ex. 25 × 52 × 15 mm" className="sm:col-span-2"><Input name="dimensions" defaultValue={values.dimensions} maxLength={120} /></Field>
           </div>
           <datalist id="units">{["pièce", "mètre", "kg", "litre", "boîte", "kit", "jeu", "rouleau", "bidon", "paire"].map((u) => <option key={u} value={u} />)}</datalist>
           {canSeeCost && (
@@ -166,10 +232,16 @@ export function ProductForm({ values, categories, brands, canPublish, canSeeCost
             <label className="flex items-center gap-2.5"><input type="checkbox" name="isFeatured" defaultChecked={values.isFeatured} className="size-4 accent-[var(--color-accent)]" /> Produit populaire (accueil)</label>
             <label className="flex items-center gap-2.5"><input type="checkbox" name="isNew" defaultChecked={values.isNew} className="size-4 accent-[var(--color-accent)]" /> Nouveauté</label>
           </div>
+          {canAdjustStock && warehouseName && (
+            <Field label={values.id ? "Quantité en stock" : "Stock initial"} optional className="mt-4" error={err("stockQty")} hint={`Dépôt : ${warehouseName}. ${values.id ? "Une correction crée un mouvement de stock tracé." : "Enregistré comme stock d'ouverture."}`}>
+              <Input name="stockQty" defaultValue={values.stockQty} inputMode="decimal" invalid={!!err("stockQty")} />
+              <input type="hidden" name="stockBase" value={values.stockQty} />
+            </Field>
+          )}
           <Field label="Stock minimum (alerte)" className="mt-4"><Input name="minStock" defaultValue={values.minStock} inputMode="decimal" /></Field>
         </section>
-        <FormMessage state={state} />
-        <SubmitButton pending={pending} className="h-12 w-full" pendingLabel="Enregistrement…">{values.id ? "Enregistrer les modifications" : "Créer le produit"}</SubmitButton>
+        {sending ? <p role="status" className="rounded-lg bg-accent-soft px-3 py-2 text-sm text-accent-hover">{sending}</p> : !createdId && <FormMessage state={state} />}
+        <SubmitButton pending={pending || !!createdId} className="h-12 w-full" pendingLabel="Enregistrement…">{values.id ? "Enregistrer les modifications" : "Créer le produit"}</SubmitButton>
       </aside>
     </form>
   );

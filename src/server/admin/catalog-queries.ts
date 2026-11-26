@@ -9,7 +9,13 @@ const esc = (v: string) => v.replace(/[\\%_]/g, (c) => `\\${c}`);
 export const availableExpr = sql<string>`coalesce((select sum(s.quantity_on_hand - s.quantity_reserved) from ${stock} s where s.product_id = ${products.id}), 0)`;
 export const onHandExpr = sql<string>`coalesce((select sum(s.quantity_on_hand) from ${stock} s where s.product_id = ${products.id}), 0)`;
 
-export async function listAdminProducts(f: { q?: string; category?: number; brand?: number; status?: string; alert?: boolean; page: number }) {
+/** Dépôt principal (stock saisi depuis la fiche produit). */
+export async function getDefaultWarehouse() {
+  const [w] = await db.select({ id: warehouses.id, name: warehouses.name }).from(warehouses).where(and(eq(warehouses.isDefault, true), eq(warehouses.isActive, true)));
+  return w ?? null;
+}
+
+export async function listAdminProducts(f: { q?: string; category?: number; brand?: number; status?: string; alert?: boolean; availability?: string; page: number }) {
   const conds: (SQL | undefined)[] = [];
   if (f.q) {
     const like = `%${esc(f.q)}%`;
@@ -21,6 +27,9 @@ export async function listAdminProducts(f: { q?: string; category?: number; bran
   else if (f.status) conds.push(sql`${products.status} = ${f.status}`);
   else conds.push(sql`${products.status} <> 'archived'`);
   if (f.alert) conds.push(sql`${availableExpr} <= ${products.minStock}`);
+  if (f.availability === "en_stock") conds.push(sql`${availableExpr} > ${products.minStock}`);
+  if (f.availability === "faible") conds.push(sql`${availableExpr} > 0 and ${availableExpr} <= ${products.minStock}`);
+  if (f.availability === "rupture") conds.push(sql`${availableExpr} <= 0`);
   const where = and(...conds);
   const [rows, [{ total }]] = await Promise.all([
     db
@@ -30,8 +39,11 @@ export async function listAdminProducts(f: { q?: string; category?: number; bran
         name: products.name,
         status: products.status,
         isActive: products.isActive,
+        slug: products.slug,
         salePrice: products.salePrice,
-        purchasePrice: products.purchasePrice,
+        proPrice: products.proPrice,
+        manufacturerRef: products.manufacturerRef,
+        imageUrl: sql<string | null>`(select i.url from ${productImages} i where i.product_id = ${products.id} order by i.is_primary desc, i.sort_order limit 1)`,
         vatRate: products.vatRate,
         minStock: products.minStock,
         unit: products.unit,
@@ -57,14 +69,14 @@ export async function getAdminProduct(id: number) {
   if (!p) return null;
   const [attributes, images, relations, stockRows] = await Promise.all([
     db.select().from(productAttributes).where(eq(productAttributes.productId, id)).orderBy(productAttributes.sortOrder),
-    db.select().from(productImages).where(eq(productImages.productId, id)).orderBy(desc(productImages.isPrimary), productImages.sortOrder),
+    db.select().from(productImages).where(eq(productImages.productId, id)).orderBy(productImages.sortOrder, desc(productImages.isPrimary), productImages.id),
     db
       .select({ sku: products.sku, kind: productEquivalents.kind })
       .from(productEquivalents)
       .innerJoin(products, eq(products.id, productEquivalents.relatedProductId))
       .where(eq(productEquivalents.productId, id)),
     db
-      .select({ warehouse: warehouses.name, code: warehouses.code, onHand: stock.quantityOnHand, reserved: stock.quantityReserved, location: stock.location })
+      .select({ warehouseId: warehouses.id, warehouse: warehouses.name, code: warehouses.code, onHand: stock.quantityOnHand, reserved: stock.quantityReserved, location: stock.location })
       .from(stock)
       .innerJoin(warehouses, eq(warehouses.id, stock.warehouseId))
       .where(eq(stock.productId, id)),

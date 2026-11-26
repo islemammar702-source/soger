@@ -9,6 +9,11 @@ const nextConfig: NextConfig = {
     formats: ["image/avif", "image/webp"],
   },
   partialPrefetching: true,
+  experimental: {
+    // Envoi des photos produit : une image (8 Mo max, vérifiée côté serveur) par requête.
+    serverActions: { bodySizeLimit: "10mb" },
+    proxyClientMaxBodySize: "10mb",
+  },
   turbopack: {
     rules: {
       "*.css": {

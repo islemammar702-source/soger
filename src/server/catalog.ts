@@ -66,6 +66,7 @@ const cardColumns = {
   unit: products.unit,
   isNew: products.isNew,
   brandName: brands.name,
+  brandSlug: brands.slug,
   categorySlug: categories.slug,
   categoryName: categories.name,
   available,

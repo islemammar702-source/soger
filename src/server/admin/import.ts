@@ -62,7 +62,9 @@ export async function runImportAction(_: ImportReport, form: FormData): Promise<
   if (!(file instanceof File) || !file.size) return { status: "error", message: "Fichier manquant." };
   const mode = z.enum(["upsert", "create", "update"]).catch("upsert").parse(form.get("mode"));
   const createRefs = form.get("createRefs") === "on";
-  const publish = form.get("publish") === "on" && me.can("products.publish");
+  const canPublish = me.can("products.publish");
+  // Case « Publier directement » : uniquement pour les nouveaux produits sans colonne Statut.
+  const publish = form.get("publish") === "on" && canPublish;
   const canStock = me.can("stock.adjust");
   let mapping: Record<string, ImportFieldKey | "">;
   try {
@@ -179,7 +181,13 @@ export async function runImportAction(_: ImportReport, form: FormData): Promise<
             values.categoryId = cid;
           }
           const status = get(r, "status");
-          if (status) values.status = /^(publi|oui|1|yes|published)/i.test(status) && publish ? "published" : /^archiv/i.test(status) ? "archived" : "draft";
+          if (status) {
+            const wanted = /^(publi|oui|1|yes|published|en ligne)/i.test(status) ? "published" : /^archiv/i.test(status) ? "archived" : "draft";
+            // La colonne Statut fait foi pour qui a le droit de publier. Sans ce droit, le statut
+            // d'un produit existant n'est jamais modifié (un ré-import ne dépublie pas le catalogue).
+            if (canPublish) values.status = wanted;
+            else if (!id) values.status = wanted === "published" ? "draft" : wanted;
+          }
 
           let pid = id;
           if (id) {

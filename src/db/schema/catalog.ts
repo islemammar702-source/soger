@@ -2,6 +2,7 @@ import { sql, type SQL } from "drizzle-orm";
 import {
   boolean,
   check,
+  customType,
   index,
   integer,
   numeric,
@@ -131,6 +132,22 @@ export const productImages = pgTable(
   },
   (t) => [index("product_images_product_idx").on(t.productId, t.sortOrder)],
 );
+
+const bytea = customType<{ data: Buffer; driverData: Buffer }>({ dataType: () => "bytea" });
+
+/**
+ * Fichiers image stockés en base quand Cloudinary n'est pas configuré
+ * (servis par /media/[id], déjà optimisés en WebP).
+ */
+export const mediaFiles = pgTable("media_files", {
+  id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
+  mimeType: text("mime_type").notNull(),
+  bytes: integer("bytes").notNull(),
+  width: integer("width"),
+  height: integer("height"),
+  data: bytea("data").notNull(),
+  ...timestamps,
+});
 
 /** Caractéristiques techniques filtrables (diamètre intérieur = 25 mm…). */
 export const productAttributes = pgTable(

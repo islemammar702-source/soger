@@ -1,25 +1,36 @@
-import Image from "next/image";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ExternalLink, Star, Trash2 } from "lucide-react";
-import { ImageUploadForm } from "@/components/admin/image-upload";
+import { Archive, Copy, EyeOff, ExternalLink, RotateCcw, Send } from "lucide-react";
+import { ImageManager } from "@/components/admin/image-manager";
 import { ProductForm } from "@/components/admin/product-form";
 import { Card, Flash, PageHeader, btn } from "@/components/admin/ui";
-import { isOptimizable } from "@/lib/utils";
-import { imageAction, setProductStatusAction } from "@/server/admin/products";
-import { getAdminProduct, getBrandOptions, getCategoryOptions } from "@/server/admin/catalog-queries";
+import { Badge } from "@/components/ui/badge";
+import { duplicateProductAction, setProductStatusAction } from "@/server/admin/products";
+import { getAdminProduct, getBrandOptions, getCategoryOptions, getDefaultWarehouse } from "@/server/admin/catalog-queries";
+import { storageMode } from "@/server/uploads";
+
+const STATUS: Record<string, [string, string]> = {
+  draft: ["Brouillon — non visible sur le site", "bg-steel/10 text-graphite"],
+  published: ["Publié sur le site", "bg-accent-soft text-accent-hover"],
+  archived: ["Archivé — conservé dans l'historique", "bg-red-50 text-red-700"],
+};
 import { requireStaff } from "@/server/auth/dal";
 
 export default async function EditProductPage({ params, searchParams }: PageProps<"/admin/produits/[id]">) {
   const me = await requireStaff("products.view");
   const id = Number((await params).id);
   const sp = await searchParams;
-  const [data, categories, brands] = await Promise.all([getAdminProduct(id), getCategoryOptions(), getBrandOptions()]);
+  const [data, categories, brands, warehouse] = await Promise.all([getAdminProduct(id), getCategoryOptions(), getBrandOptions(), getDefaultWarehouse()]);
   if (!data) notFound();
   const { p, attributes, images, relations, stockRows } = data;
   const canEdit = me.can("products.update");
   const totalOnHand = stockRows.reduce((s, r) => s + Number(r.onHand), 0);
   const totalReserved = stockRows.reduce((s, r) => s + Number(r.reserved), 0);
+  const canPublish = me.can("products.publish");
+  const statusForm = (status: string, label: React.ReactNode, cls: string) => (
+    <form action={setProductStatusAction}><input type="hidden" name="id" value={p.id} /><input type="hidden" name="status" value={status} /><button className={cls}>{label}</button></form>
+  );
+  const defaultStock = warehouse ? stockRows.find((r) => r.warehouseId === warehouse.id) : undefined;
   return (
     <>
       <PageHeader
@@ -28,18 +39,20 @@ export default async function EditProductPage({ params, searchParams }: PageProp
         back={{ href: "/admin/produits", label: "Produits" }}
         actions={
           <>
+            <Badge tone={STATUS[p.status][1]}>{STATUS[p.status][0]}</Badge>
             {p.status === "published" && <Link href={`/produits/${p.slug}`} target="_blank" className={btn.outline}><ExternalLink className="size-4" /> Voir sur le site</Link>}
-            {canEdit && p.status !== "archived" && (
-              <form action={setProductStatusAction}><input type="hidden" name="id" value={p.id} /><input type="hidden" name="status" value="archived" /><button className={btn.danger}>Archiver</button></form>
+            {me.can("products.create") && (
+              <form action={duplicateProductAction}><input type="hidden" name="id" value={p.id} /><button className={btn.outline}><Copy className="size-4" /> Dupliquer</button></form>
             )}
-            {p.status !== "published" && me.can("products.publish") && (
-              <form action={setProductStatusAction}><input type="hidden" name="id" value={p.id} /><input type="hidden" name="status" value="published" /><button className={btn.primary}>Publier</button></form>
-            )}
+            {canEdit && canPublish && p.status === "published" && statusForm("draft", <><EyeOff className="size-4" /> Dépublier</>, btn.outline)}
+            {canEdit && canPublish && p.status === "draft" && statusForm("published", <><Send className="size-4" /> Publier</>, btn.primary)}
+            {canEdit && p.status === "archived" && statusForm("draft", <><RotateCcw className="size-4" /> Restaurer</>, btn.outline)}
+            {canEdit && p.status !== "archived" && (p.status !== "published" || canPublish) && statusForm("archived", <><Archive className="size-4" /> Archiver</>, btn.danger)}
           </>
         }
       />
       <Flash sp={sp} />
-      <div className="mb-6 grid gap-4 md:grid-cols-[1fr_1fr]">
+      <div className="mb-6">
         <Card title="Stock par dépôt" actions={me.can("stock.adjust") && <Link href={`/admin/stock/operations?produit=${encodeURIComponent(p.sku)}`} className="text-xs font-medium text-accent">Mouvement de stock</Link>}>
           {stockRows.length ? (
             <ul className="space-y-1.5 text-sm">
@@ -53,42 +66,30 @@ export default async function EditProductPage({ params, searchParams }: PageProp
           )}
           <Link href={`/admin/stock/mouvements?produit=${encodeURIComponent(p.sku)}`} className="mt-3 inline-block text-xs font-medium text-accent">Historique des mouvements →</Link>
         </Card>
-        <Card title="Images" padded>
-          <div id="images" className="mb-4 flex flex-wrap gap-3">
-            {images.length === 0 && <p className="text-sm text-steel">Aucune image.</p>}
-            {images.map((img) => (
-              <div key={img.id} className="relative size-24 overflow-hidden rounded-lg border border-line bg-mist">
-                <Image src={img.url} alt={img.alt ?? ""} fill sizes="96px" className="object-contain p-1" unoptimized={!isOptimizable(img.url)} />
-                {img.isPrimary && <span className="absolute top-1 left-1 rounded bg-ink px-1.5 text-[10px] text-white">Principale</span>}
-                {canEdit && (
-                  <div className="absolute right-1 bottom-1 flex gap-1">
-                    {!img.isPrimary && (
-                      <form action={imageAction}><input type="hidden" name="imageId" value={img.id} /><input type="hidden" name="op" value="primary" /><button aria-label="Image principale" className="grid size-6 place-items-center rounded bg-white/90 text-graphite"><Star className="size-3.5" /></button></form>
-                    )}
-                    <form action={imageAction}><input type="hidden" name="imageId" value={img.id} /><input type="hidden" name="op" value="delete" /><button aria-label="Supprimer l'image" className="grid size-6 place-items-center rounded bg-white/90 text-danger"><Trash2 className="size-3.5" /></button></form>
-                  </div>
-                )}
-              </div>
-            ))}
-          </div>
-          {canEdit && <ImageUploadForm productId={p.id} uploadEnabled={!!process.env.CLOUDINARY_URL} />}
-        </Card>
       </div>
+      <Card title={`Images (${images.length})`} className="mb-6">
+        <ImageManager productId={p.id} canEdit={canEdit} storage={storageMode()} images={images.map((i) => ({ id: i.id, url: i.url, alt: i.alt, isPrimary: i.isPrimary }))} />
+      </Card>
       {canEdit ? (
         <ProductForm
+          key={p.status}
           categories={categories}
           brands={brands}
-          canPublish={me.can("products.publish")}
+          canPublish={canPublish}
           canSeeCost={me.can("products.view_cost")}
+          canAdjustStock={me.can("stock.adjust")}
+          warehouseName={warehouse?.name ?? null}
           values={{
             id: p.id, sku: p.sku, manufacturerRef: p.manufacturerRef ?? "", barcode: p.barcode ?? "", name: p.name, slug: p.slug,
             shortDescription: p.shortDescription ?? "", description: p.description ?? "", categoryId: p.categoryId ? String(p.categoryId) : "",
-            brandId: p.brandId ? String(p.brandId) : "", unit: p.unit, purchasePrice: p.purchasePrice ?? "", salePrice: p.salePrice ?? "",
+            brandId: p.brandId ? String(p.brandId) : "", unit: p.unit, purchasePrice: me.can("products.view_cost") ? (p.purchasePrice ?? "") : "", salePrice: p.salePrice ?? "",
             proPrice: p.proPrice ?? "", vatRate: p.vatRate, minStock: String(Number(p.minStock)), weightKg: p.weightKg ?? "", status: p.status,
             isFeatured: p.isFeatured, isNew: p.isNew, isActive: p.isActive,
-            attributes: attributes.map((a) => ({ key: a.key, label: a.label, value: a.value, unit: a.unit ?? "" })),
+            attributes: attributes.filter((a) => a.key !== "dimensions").map((a) => ({ key: a.key, label: a.label, value: a.value, unit: a.unit ?? "" })),
             equivalents: relations.filter((r) => r.kind === "equivalent").map((r) => r.sku).join(", "),
             compatibles: relations.filter((r) => r.kind === "compatible").map((r) => r.sku).join(", "),
+            dimensions: attributes.find((a) => a.key === "dimensions")?.value ?? "",
+            stockQty: defaultStock ? String(Number(defaultStock.onHand)) : "0",
           }}
         />
       ) : (

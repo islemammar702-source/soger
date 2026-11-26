@@ -62,12 +62,13 @@ async function ProductContent({ params }: { params: PageProps<"/produits/[slug]"
 
         <div>
           <div className="flex items-center justify-between gap-3">
-            <p className="text-sm font-semibold tracking-wide text-steel uppercase">{p.brandName}</p>
+            {p.brandSlug ? <Link href={`/produits?marque=${p.brandSlug}`} className="text-sm font-semibold tracking-wide text-steel uppercase hover:text-accent">{p.brandName}</Link> : <p className="text-sm font-semibold tracking-wide text-steel uppercase">{p.brandName}</p>}
             <FavoriteButton productId={p.id} slug={p.slug} />
           </div>
           <dl className="mt-4 grid grid-cols-[auto_1fr] gap-x-8 gap-y-2 text-sm">
             <dt className="text-steel">Référence SOGER</dt><dd className="font-mono font-medium">{p.sku}</dd>
             {p.manufacturerRef && (<><dt className="text-steel">Réf. fabricant</dt><dd className="font-mono font-medium">{p.manufacturerRef}</dd></>)}
+            {p.brandName && (<><dt className="text-steel">Marque</dt><dd className="font-medium">{p.brandName}</dd></>)}
             {p.categoryName && (
               <><dt className="text-steel">Catégorie</dt><dd><Link href={`/categories/${p.categorySlug}`} className="hover:text-accent">{p.categoryName}</Link></dd></>
             )}
@@ -106,7 +107,8 @@ async function ProductContent({ params }: { params: PageProps<"/produits/[slug]"
             {qty <= 0 && <p className="mt-3 text-xs text-steel">Produit sur commande : le délai vous est confirmé avec votre devis.</p>}
           </div>
 
-          {(p.description ?? p.shortDescription) && <p className="mt-8 leading-relaxed text-graphite">{p.description ?? p.shortDescription}</p>}
+          {p.shortDescription && <p className="mt-8 font-medium leading-relaxed text-ink">{p.shortDescription}</p>}
+          {p.description && p.description !== p.shortDescription && <div className="mt-4 leading-relaxed whitespace-pre-line text-graphite">{p.description}</div>}
 
           <ul className="mt-6 flex flex-wrap gap-x-6 gap-y-2 text-sm text-steel">
             <li className="flex items-center gap-2"><ShieldCheck className="size-4 text-accent" /> Produit de marque</li>
