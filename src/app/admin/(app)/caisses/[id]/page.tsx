@@ -7,7 +7,8 @@ import { Card, Flash, PageHeader, StatCard, Table, Td, Th } from "@/components/a
 import { SubmitButton } from "@/components/ui/form";
 import { PAYMENT_METHOD, formatDateTime } from "@/lib/labels";
 import { formatTND } from "@/lib/utils";
-import { closeSessionAction, expectedCash } from "@/server/admin/pos";
+import { closeSessionAction } from "@/server/admin/pos";
+import { expectedCash } from "@/server/admin/caisse-queries";
 import { requireStaff } from "@/server/auth/dal";
 import type { Tx } from "@/server/audit";
 

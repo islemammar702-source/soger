@@ -10,6 +10,7 @@ import { INVOICE_STATUS, ORDER_STATUS, PAYMENT_METHOD, QUOTE_STATUS, formatDate,
 import { formatTND } from "@/lib/utils";
 import { removeCustomerPriceAction, setCustomerPriceAction, setPriceTierAction } from "@/server/admin/parties";
 import { requireStaff } from "@/server/auth/dal";
+import { customerDueFor } from "@/server/receivables";
 
 export default async function CustomerPage({ params, searchParams }: PageProps<"/admin/clients/[id]">) {
   const me = await requireStaff("customers.view");
@@ -26,7 +27,7 @@ export default async function CustomerPage({ params, searchParams }: PageProps<"
     db
       .select({
         revenue: sql<string>`coalesce((select sum(total) from ${orders} where customer_id = ${id} and status in ('confirmed','preparing','shipped','delivered')), 0)`,
-        due: sql<string>`coalesce((select sum(case when kind = 'credit_note' then -(total - amount_paid) else total - amount_paid end) from ${invoices} where customer_id = ${id} and status in ('issued','partially_paid')), 0)`,
+        due: customerDueFor(id),
         overdue: sql<string>`coalesce((select sum(total - amount_paid) from ${invoices} where customer_id = ${id} and kind = 'customer' and status in ('issued','partially_paid') and due_date < current_date), 0)`,
         paid: sql<string>`coalesce((select sum(amount) from ${payments} where customer_id = ${id} and direction = 'in'), 0)`,
       })

@@ -1,6 +1,7 @@
 import "server-only";
 import { and, desc, eq, gte, inArray, lt, sql } from "drizzle-orm";
 import { db } from "@/db";
+import { allReceivables } from "../receivables";
 import { categories, invoices, orderItems, orders, products, quotes, stock } from "@/db/schema";
 
 /**
@@ -62,9 +63,8 @@ export async function getDashboard() {
     db.select({ n: sql<number>`count(*)::int` }).from(orders).where(eq(orders.status, "pending")),
     db.select({ n: sql<number>`count(*)::int`, total: sql<string>`coalesce(sum(${quotes.total}),0)` }).from(quotes).where(inArray(quotes.status, ["draft", "sent"])),
     db
-      .select({ due: sql<string>`coalesce(sum(${invoices.total} - ${invoices.amountPaid}), 0)`, n: sql<number>`count(*)::int` })
-      .from(invoices)
-      .where(and(eq(invoices.kind, "customer"), inArray(invoices.status, ["issued", "partially_paid"]))),
+      .select({ due: allReceivables, n: sql<number>`(select count(*)::int from ${invoices} where kind = 'customer' and status in ('issued','partially_paid'))` })
+      .from(sql`(select 1) as one`),
     db
       .select({ due: sql<string>`coalesce(sum(${invoices.total} - ${invoices.amountPaid}), 0)`, n: sql<number>`count(*)::int` })
       .from(invoices)

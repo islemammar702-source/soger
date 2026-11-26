@@ -1,21 +1,30 @@
 "use server";
 
 import { and, eq, isNull, sql } from "drizzle-orm";
-import { updateTag } from "next/cache";
+import { revalidatePath, updateTag } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
 import { db } from "@/db";
-import { cashRegisters, cashSessions, customers, expenses, invoices, payments } from "@/db/schema";
+import { cashRegisters, cashSessions, customers, expenses, invoices, orders } from "@/db/schema";
 import { fmt3, round3 } from "@/lib/totals";
 import { formatTND } from "@/lib/utils";
+import { InsufficientStockError } from "../inventory";
 import { audit } from "../audit";
 import { AccessDenied, assertStaff } from "../auth/dal";
 import { invoiceOrder, recordPayment } from "../finance";
 import { BusinessError, createOrder, defaultWarehouseId } from "../orders";
 import { getSettings } from "../settings";
+import { customerDueFor } from "../receivables";
+import { expectedCash } from "./caisse-queries";
+import { nextDocumentNumber } from "../sequences";
 import type { Tx } from "../audit";
 
-const errMsg = (e: unknown) => (e instanceof BusinessError || e instanceof AccessDenied ? e.message : (console.error(e), "Opération impossible."));
+const errMsg = (e: unknown) =>
+  e instanceof BusinessError || e instanceof AccessDenied
+    ? e.message
+    : e instanceof InsufficientStockError
+      ? `Stock insuffisant : ${e.label ?? "un article"} (disponible : ${Number(e.available)}). Réduisez la quantité ou réceptionnez la marchandise.`
+      : (console.error(e), "Opération impossible.");
 
 /** Caisse principale (créée à la première utilisation). */
 async function mainRegister(tx: Tx) {
@@ -43,20 +52,6 @@ export async function openSessionAction(form: FormData) {
   redirect("/admin/caisse");
 }
 
-/** Espèces attendues = fond de caisse + encaissements espèces − remboursements et dépenses en espèces. */
-export async function expectedCash(tx: Tx, sessionId: number) {
-  const [s] = await tx.select().from(cashSessions).where(eq(cashSessions.id, sessionId));
-  const [{ cin, cout }] = await tx
-    .select({
-      cin: sql<string>`coalesce(sum(${payments.amount}) filter (where ${payments.direction} = 'in' and ${payments.method} = 'cash'), 0)`,
-      cout: sql<string>`coalesce(sum(${payments.amount}) filter (where ${payments.direction} = 'out' and ${payments.method} = 'cash'), 0)`,
-    })
-    .from(payments)
-    .where(eq(payments.cashSessionId, sessionId));
-  const [{ exp }] = await tx.select({ exp: sql<string>`coalesce(sum(${expenses.amount}), 0)` }).from(expenses).where(and(eq(expenses.cashSessionId, sessionId), eq(expenses.method, "cash")));
-  return round3(Number(s.openingAmount) + Number(cin) - Number(cout) - Number(exp));
-}
-
 export async function closeSessionAction(form: FormData) {
   const me = await assertStaff("pos.close_register");
   const id = Number(form.get("id"));
@@ -81,7 +76,7 @@ const saleSchema = z.object({
   cashGiven: z.number().min(0).optional(),
 });
 
-export type SaleResult = { ok: true; orderId: number; number: string; total: number; change: number; invoiceId: number | null } | { ok: false; message: string };
+export type SaleResult = { ok: true; orderId: number; number: string; total: number; paid: number; remaining: number; change: number; invoiceId: number | null } | { ok: false; message: string };
 
 /** Vente en caisse : commande livrée immédiatement (sortie de stock), paiements, facture ou ticket. */
 export async function posSaleAction(input: z.infer<typeof saleSchema>): Promise<SaleResult> {
@@ -121,7 +116,13 @@ export async function posSaleAction(input: z.infer<typeof saleSchema>): Promise<
       const cashPaid = d.payments.filter((p) => p.method === "cash").reduce((s, p) => s + p.amount, 0);
       const change = round3(Math.max(0, paid - total));
       if (change > cashPaid + 0.0005) throw new BusinessError("Le trop-perçu ne peut être rendu qu'en espèces.");
-      if (paid < total - 0.0005 && !customer) throw new BusinessError("Paiement partiel : sélectionnez un client (le reste sera dû sur son compte).");
+      if (paid < total - 0.0005 && !customer) throw new BusinessError("Paiement partiel ou à crédit : sélectionnez un client (le reste sera dû sur son compte).");
+      // Plafond de crédit du client (si défini) : créances existantes + nouveau reste à payer.
+      if (customer?.creditLimit && paid < total - 0.0005) {
+        const [{ due }] = await tx.select({ due: customerDueFor(customer.id) }).from(sql`(select 1) as one`);
+        const after = round3(Number(due) + total - paid);
+        if (after > Number(customer.creditLimit) + 0.0005) throw new BusinessError(`Plafond de crédit dépassé : ${after.toFixed(3)} DT dus pour un plafond de ${Number(customer.creditLimit).toFixed(3)} DT.`);
+      }
       let invoiceId: number | null = null;
       if (d.invoice) {
         if (!customer) throw new BusinessError("Une facture nécessite un client.");
@@ -131,16 +132,19 @@ export async function posSaleAction(input: z.infer<typeof saleSchema>): Promise<
       // Le droit de timbre éventuel s'ajoute au montant dû sur facture.
       const due = invoiceId ? Number((await tx.select({ t: invoices.total }).from(invoices).where(eq(invoices.id, invoiceId)))[0].t) : total;
       let left = due;
+      let collected = 0;
       for (const p of d.payments) {
         const amount = round3(Math.min(p.amount - (p.method === "cash" ? change : 0), left));
         if (amount <= 0) continue;
         await recordPayment(tx, { direction: "in", method: p.method, amount, customerId: customer?.id ?? null, orderId: order.id, invoiceId, cashSessionId: session.id, reference: p.reference, userId: me.id });
         left = round3(left - amount);
+        collected = round3(collected + amount);
       }
       await audit({ userId: me.id, module: "pos", action: "sale", entityType: "order", entityId: order.id, newValues: { number: order.number, total, paid, change, invoiceId } }, tx);
-      return { orderId: order.id, number: order.number, total: due, change, invoiceId };
+      return { orderId: order.id, number: order.number, total: due, paid: collected, remaining: round3(due - collected), change, invoiceId };
     });
     updateTag("products");
+    revalidatePath("/admin/caisse");
     return { ok: true, ...res };
   } catch (e) {
     return { ok: false, message: errMsg(e) };
@@ -190,4 +194,74 @@ export async function deleteExpenseAction(form: FormData) {
   await db.delete(expenses).where(eq(expenses.id, id));
   await audit({ userId: me.id, module: "expenses", action: "delete", entityType: "expense", entityId: id, oldValues: e });
   redirect("/admin/depenses?ok=Dépense supprimée");
+}
+
+/* ─── Client rapide (depuis l'écran de vente) ──────────────────────── */
+
+const quickCustomerSchema = z.object({
+  name: z.string().trim().min(2, "Nom ou raison sociale obligatoire").max(160),
+  phone: z.string().trim().regex(/^[+\d][\d\s.-]{6,19}$/, "Téléphone invalide"),
+  address: z.string().trim().max(300).optional(),
+  taxId: z.string().trim().max(40).optional(),
+});
+
+export type QuickCustomerResult = { ok: true; customer: { id: number; code: string; name: string; phone: string | null; pro: boolean } } | { ok: false; message: string };
+
+export async function quickCreateCustomerAction(input: z.input<typeof quickCustomerSchema>): Promise<QuickCustomerResult> {
+  let me;
+  try {
+    me = await assertStaff("customers.create");
+  } catch (e) {
+    return { ok: false, message: errMsg(e) };
+  }
+  const parsed = quickCustomerSchema.safeParse(input);
+  if (!parsed.success) return { ok: false, message: parsed.error.issues[0]?.message ?? "Données invalides" };
+  const d = parsed.data;
+  const pro = !!d.taxId;
+  const created = await db.transaction(async (tx) => {
+    const [dup] = await tx.select({ code: customers.code }).from(customers).where(eq(customers.phone, d.phone)).limit(1);
+    if (dup) throw new BusinessError(`Un client existe déjà avec ce téléphone (${dup.code}) : recherchez-le.`);
+    const code = await nextDocumentNumber(tx, "customer");
+    const [first, ...rest] = d.name.split(/\s+/);
+    const [c] = await tx
+      .insert(customers)
+      .values({ code, type: pro ? "professional" : "individual", companyName: pro ? d.name : null, firstName: pro ? null : first, lastName: pro ? null : rest.join(" ") || null, phone: d.phone, address: d.address || null, taxId: d.taxId || null })
+      .returning();
+    await audit({ userId: me.id, module: "customers", action: "create_pos", entityType: "customer", entityId: c.id, newValues: d }, tx);
+    return c;
+  }).catch((e) => e as Error);
+  if (created instanceof Error) return { ok: false, message: errMsg(created) };
+  return { ok: true, customer: { id: created.id, code: created.code, name: d.name, phone: created.phone, pro: false } };
+}
+
+/* ─── Paiement complémentaire d'une vente (encaissé dans la caisse ouverte) ── */
+
+export async function posPaymentAction(form: FormData) {
+  const orderId = Number(form.get("orderId"));
+  const back = `/admin/caisse/ventes/${orderId}`;
+  let msg = "";
+  try {
+    const me = await assertStaff("payments.create");
+    if (!me.can("pos.use")) throw new AccessDenied("pos.use");
+    const amount = round3(Number(String(form.get("amount") ?? "").replace(",", ".")));
+    const method = z.enum(["cash", "card", "transfer", "check"]).parse(form.get("method"));
+    const reference = String(form.get("reference") ?? "").slice(0, 80) || null;
+    if (!(amount > 0)) throw new BusinessError("Montant invalide.");
+    msg = await db.transaction(async (tx) => {
+      const [session] = await tx.select().from(cashSessions).where(isNull(cashSessions.closedAt)).limit(1);
+      if (!session) throw new BusinessError("Ouvrez la caisse pour encaisser un paiement.");
+      const [o] = await tx.select().from(orders).where(eq(orders.id, orderId)).for("update");
+      if (!o || o.status === "cancelled") throw new BusinessError("Vente introuvable ou annulée.");
+      const [inv] = await tx.select().from(invoices).where(and(eq(invoices.orderId, orderId), eq(invoices.kind, "customer"), sql`${invoices.status} <> 'cancelled'`));
+      const remaining = round3(inv ? Number(inv.total) - Number(inv.amountPaid) : Number(o.total) - Number(o.amountPaid));
+      if (amount > remaining + 0.0005) throw new BusinessError(`Montant supérieur au reste à payer (${remaining.toFixed(3)} DT).`);
+      const p = await recordPayment(tx, { direction: "in", method, amount, customerId: o.customerId, orderId, invoiceId: inv?.id ?? null, cashSessionId: session.id, reference, userId: me.id, notes: "Paiement complémentaire" });
+      await audit({ userId: me.id, module: "pos", action: "complementary_payment", entityType: "order", entityId: orderId, newValues: { paymentId: p.id, amount, method } }, tx);
+      return `Paiement de ${amount.toFixed(3).replace(".", ",")} DT encaissé. Reste à payer : ${round3(remaining - amount).toFixed(3).replace(".", ",")} DT.`;
+    });
+    revalidatePath("/admin/caisse");
+  } catch (e) {
+    redirect(`${back}?erreur=${encodeURIComponent(errMsg(e))}`);
+  }
+  redirect(`${back}?ok=${encodeURIComponent(msg)}`);
 }

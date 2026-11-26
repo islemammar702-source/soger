@@ -6,7 +6,7 @@ import { documentTotals } from "@/lib/totals";
 import { cn, formatTND } from "@/lib/utils";
 
 export type EditorLine = { productId: number | null; sku: string | null; description: string; quantity: number; unitPrice: number; discountRate: number; vatRate: number };
-export type ProductHit = { id: number; sku: string; name: string; unit: string; vatRate: number; price: number | null; cost: number | null; available: number; exact: boolean };
+export type ProductHit = { id: number; sku: string; name: string; unit: string; vatRate: number; price: number | null; cost: number | null; available: number; exact: boolean; manufacturerRef?: string | null; brand?: string | null; imageUrl?: string | null };
 
 /** Recherche produit (référence, nom, code-barres) avec navigation clavier. */
 export function ProductPicker({ onPick, customerId, placeholder = "Ajouter un produit : référence, nom ou code-barres…", autoFocus, inputRef }: { onPick: (p: ProductHit) => void; customerId?: number | null; placeholder?: string; autoFocus?: boolean; inputRef?: React.RefObject<HTMLInputElement | null> }) {

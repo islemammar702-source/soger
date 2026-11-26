@@ -8,6 +8,7 @@ import { db } from "@/db";
 import { customers, invoices, orders, quoteItems, quotes } from "@/db/schema";
 import { documentTotals, fmt3 } from "@/lib/totals";
 import { formatTND } from "@/lib/utils";
+import { InsufficientStockError } from "../inventory";
 import { audit } from "../audit";
 import { AccessDenied, assertStaff } from "../auth/dal";
 import { documentUrl, sendMail } from "../documents";
@@ -19,7 +20,12 @@ import { getSettings } from "../settings";
 import type { FormState } from "../account-actions";
 
 const back = (path: string, msg: string, ok = true) => redirect(`${path}${path.includes("?") ? "&" : "?"}${ok ? "ok" : "erreur"}=${encodeURIComponent(msg)}`);
-const errMsg = (e: unknown) => (e instanceof BusinessError || e instanceof AccessDenied ? e.message : (console.error(e), "Opération impossible."));
+const errMsg = (e: unknown) =>
+  e instanceof BusinessError || e instanceof AccessDenied
+    ? e.message
+    : e instanceof InsufficientStockError
+      ? `Stock insuffisant : ${e.label ?? "un article"} (disponible : ${Number(e.available)}). Réduisez la quantité ou réceptionnez la marchandise.`
+      : (console.error(e), "Opération impossible.");
 
 /* ─── Devis ────────────────────────────────────────────────────────── */
 
@@ -226,7 +232,7 @@ export async function orderStepAction(form: FormData) {
 
 export async function orderReturnAction(form: FormData) {
   const id = Number(form.get("id"));
-  const path = `/admin/commandes/${id}`;
+  const path = form.get("back") === "caisse" ? `/admin/caisse/ventes/${id}` : `/admin/commandes/${id}`;
   let msg = "";
   try {
     const me = await assertStaff("orders.return");

@@ -66,6 +66,7 @@ export async function recordPayment(
     const [inv] = await tx.select().from(invoices).where(eq(invoices.id, p.invoiceId));
     if (!inv) throw new BusinessError("Facture introuvable.");
     if (inv.status === "cancelled" || inv.status === "draft") throw new BusinessError("Impossible d'encaisser une facture annulée ou en brouillon.");
+    if (inv.kind === "credit_note" && inv.status === "paid") throw new BusinessError("Cet avoir est déjà soldé.");
     const remaining = round3(Number(inv.total) - Number(inv.amountPaid));
     if (inv.kind !== "credit_note" && amount > remaining + 0.0005) throw new BusinessError(`Montant supérieur au reste à payer (${remaining.toFixed(3)} DT).`);
     orderId = orderId ?? inv.orderId;
@@ -149,7 +150,13 @@ export async function invoiceOrder(tx: Tx, orderId: number, opts: { userId: numb
   return inv;
 }
 
-/** Avoir : annulation comptable totale d'une facture client (la facture d'origine est conservée). */
+/**
+ * Avoir : annulation comptable totale d'une facture client (la facture d'origine est conservée).
+ * - Facture jamais payée : elle est annulée et l'avoir est soldé d'office (rien à rembourser).
+ * - Facture (partiellement) payée : la facture reste telle quelle et l'avoir vient en déduction ;
+ *   le solde client devient négatif du montant déjà payé (à rembourser).
+ * Ainsi l'avoir n'est jamais déduit deux fois du solde du client.
+ */
 export async function creditNoteFor(tx: Tx, invoiceId: number, userId: number | null) {
   const [inv] = await tx.select().from(invoices).where(eq(invoices.id, invoiceId)).for("update");
   if (!inv || inv.kind !== "customer") throw new BusinessError("Facture client introuvable.");
@@ -157,6 +164,7 @@ export async function creditNoteFor(tx: Tx, invoiceId: number, userId: number | 
   if (already) throw new BusinessError(`Un avoir existe déjà (${already.number}).`);
   const items = await tx.select().from(invoiceItems).where(eq(invoiceItems.invoiceId, invoiceId));
   const number = await nextDocumentNumber(tx, "credit_note");
+  const neverPaid = Number(inv.amountPaid) <= 0;
   const [cn] = await tx
     .insert(invoices)
     .values({
@@ -165,7 +173,7 @@ export async function creditNoteFor(tx: Tx, invoiceId: number, userId: number | 
       customerId: inv.customerId,
       orderId: inv.orderId,
       creditedInvoiceId: inv.id,
-      status: "issued",
+      status: neverPaid ? "paid" : "issued",
       issueDate: new Date().toISOString().slice(0, 10),
       billingName: inv.billingName,
       billingTaxId: inv.billingTaxId,
@@ -173,8 +181,9 @@ export async function creditNoteFor(tx: Tx, invoiceId: number, userId: number | 
       subtotal: inv.subtotal,
       discountTotal: inv.discountTotal,
       vatTotal: inv.vatTotal,
-      stampDuty: "0",
-      total: fmt3(Number(inv.total) - Number(inv.stampDuty)),
+      stampDuty: inv.stampDuty,
+      total: inv.total,
+      amountPaid: neverPaid ? inv.total : "0",
       notes: `Avoir sur facture ${inv.number}`,
       createdBy: userId,
       issuedAt: new Date(),
@@ -184,9 +193,7 @@ export async function creditNoteFor(tx: Tx, invoiceId: number, userId: number | 
     await tx.insert(invoiceItems).values(
       items.map((i) => ({ invoiceId: cn.id, productId: i.productId, sku: i.sku, description: i.description, quantity: i.quantity, unitPrice: i.unitPrice, discountRate: i.discountRate, vatRate: i.vatRate, lineTotal: i.lineTotal, sortOrder: i.sortOrder })),
     );
-  // La facture d'origine est soldée par l'avoir pour son reste dû.
-  const remaining = round3(Number(inv.total) - Number(inv.amountPaid));
-  await tx.update(invoices).set({ status: remaining > 0 ? "cancelled" : inv.status }).where(eq(invoices.id, invoiceId));
+  if (neverPaid) await tx.update(invoices).set({ status: "cancelled" }).where(eq(invoices.id, invoiceId));
   return cn;
 }
 

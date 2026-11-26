@@ -1,6 +1,6 @@
 import { and, eq, sql } from "drizzle-orm";
 import type { PgDatabase, PgQueryResultHKT } from "drizzle-orm/pg-core";
-import { stock, stockMovements } from "@/db/schema";
+import { products, stock, stockMovements } from "@/db/schema";
 
 type Tx = PgDatabase<PgQueryResultHKT, Record<string, unknown>>;
 
@@ -21,8 +21,8 @@ export type StockMovementInput = {
 };
 
 export class InsufficientStockError extends Error {
-  constructor(public productId: number, public available: string) {
-    super(`Stock insuffisant pour le produit ${productId} (disponible : ${available})`);
+  constructor(public productId: number, public available: string, public label?: string) {
+    super(`Stock insuffisant pour ${label ?? `le produit ${productId}`} (disponible : ${available})`);
   }
 }
 
@@ -49,7 +49,8 @@ export async function applyStockMovement(tx: Tx, input: StockMovementInput) {
 
   const after = Number(current.onHand) + Number(delta);
   if (after < 0 && !input.allowNegative) {
-    throw new InsufficientStockError(input.productId, current.onHand);
+    const [p] = await tx.select({ sku: products.sku, name: products.name }).from(products).where(eq(products.id, input.productId));
+    throw new InsufficientStockError(input.productId, current.onHand, p ? `${p.name} (${p.sku})` : undefined);
   }
 
   const [updated] = await tx

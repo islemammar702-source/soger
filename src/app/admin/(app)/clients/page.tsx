@@ -2,14 +2,16 @@ import Link from "next/link";
 import { Plus } from "lucide-react";
 import { and, desc, eq, ilike, or, sql, type SQL } from "drizzle-orm";
 import { db } from "@/db";
-import { customers, invoices, orders } from "@/db/schema";
+import { customers, orders } from "@/db/schema";
+import { customerDueFor } from "@/server/receivables";
 import { Card, EmptyRow, FilterBar, FilterSelect, PageHeader, Pagination, Table, Td, Th, btn, listHref, one } from "@/components/admin/ui";
 import { Badge } from "@/components/ui/badge";
 import { formatTND } from "@/lib/utils";
 import { requireStaff } from "@/server/auth/dal";
 
 const PAGE = 50;
-const receivableExpr = sql<string>`coalesce((select sum(case when i.kind = 'credit_note' then -(i.total - i.amount_paid) else i.total - i.amount_paid end) from ${invoices} i where i.customer_id = ${customers.id} and i.status in ('issued','partially_paid')), 0)`;
+/** Factures non soldées + ventes à crédit non facturées. */
+const receivableExpr = customerDueFor(sql`${customers.id}`);
 
 export default async function CustomersPage({ searchParams }: PageProps<"/admin/clients">) {
   const me = await requireStaff("customers.view");

@@ -150,8 +150,10 @@ async function DocumentView({ params, searchParams }: PageProps<"/documents/[kin
           <p className="flex justify-between"><span>Total HT</span><span>{formatTND(t.netTotal)}</span></p>
           {t.vatBreakdown.map((v) => <p key={v.rate} className="flex justify-between"><span>TVA {v.rate}% sur {formatTND(v.base)}</span><span>{formatTND(v.vat)}</span></p>)}
           <p className="flex justify-between text-sm font-bold"><span>TOTAL TTC</span><span>{formatTND(doc.total)}</span></p>
-          {doc.paid && <p className="flex justify-between"><span>Payé</span><span>{formatTND(doc.paid)}</span></p>}
+          {doc.paid !== undefined && <p className="flex justify-between"><span>Payé</span><span>{formatTND(doc.paid)}</span></p>}
+          {doc.paid !== undefined && Number(doc.total) - Number(doc.paid) > 0.0005 && <p className="flex justify-between font-bold"><span>RESTE À PAYER</span><span>{formatTND(Number(doc.total) - Number(doc.paid))}</span></p>}
         </div>
+        {doc.party.name && doc.party.name !== "Client comptoir" && <p className="mt-2">Client : {doc.party.name}</p>}
         <p className="mt-3 text-center">{s.sales.invoiceFooter}</p>
         <PrintButton auto />
       </div>

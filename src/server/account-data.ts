@@ -2,6 +2,7 @@ import "server-only";
 import { and, desc, eq, inArray, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { favorites, invoices, notifications, orderItems, orders, payments, quoteItems, quotes } from "@/db/schema";
+import { customerDueFor } from "./receivables";
 
 /** Toutes les requêtes sont filtrées par le client connecté : impossible de lire les données d'un autre client. */
 
@@ -53,13 +54,9 @@ export const getMyPayments = (customerId: number) =>
     .orderBy(desc(payments.paidAt))
     .limit(100);
 
+/** Reste à payer : factures non soldées + achats à crédit en magasin non facturés. */
 export async function getMyBalance(customerId: number) {
-  const [row] = await db
-    .select({
-      due: sql<string>`coalesce(sum(case when ${invoices.kind} = 'credit_note' then -(${invoices.total} - ${invoices.amountPaid}) else ${invoices.total} - ${invoices.amountPaid} end), 0)`,
-    })
-    .from(invoices)
-    .where(and(eq(invoices.customerId, customerId), inArray(invoices.status, ["issued", "partially_paid"])));
+  const [row] = await db.select({ due: customerDueFor(customerId) }).from(sql`(select 1) as one`);
   return Number(row.due);
 }
 
