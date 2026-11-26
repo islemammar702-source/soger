@@ -144,19 +144,20 @@ export function ProductPicker({ onPick, customerId, placeholder = "Ajouter un pr
           {hits.map((h, i) => (
             <li key={h.id} id={`product-option-${h.id}`} role="option" aria-selected={i === active} data-index={i}>
               <button type="button" tabIndex={-1} onMouseDown={(e) => e.preventDefault()} onClick={() => pick(h, "click")} onMouseMove={() => setActive(i)} className={cn("flex w-full items-center gap-3 px-3 py-2 text-left text-sm", i === active && "bg-accent-soft/60")}>
-                <span className="relative grid size-10 shrink-0 place-items-center overflow-hidden rounded-md border border-line bg-mist">
+                <span className="relative hidden size-10 shrink-0 place-items-center overflow-hidden rounded-md border border-line bg-mist sm:grid">
                   {h.imageUrl ? <Image src={h.imageUrl} alt="" fill sizes="40px" className="object-contain p-0.5" unoptimized={!isOptimizable(h.imageUrl)} /> : <Package className="size-4 text-steel/50" />}
                 </span>
                 <span className="min-w-0 flex-1">
-                  <span className="block truncate font-medium"><Mark text={h.name} terms={terms} /></span>
+                  <span className="block font-medium leading-snug sm:truncate"><Mark text={h.name} terms={terms} /></span>
                   <span className="block truncate text-xs text-steel">
                     Réf : <span className="font-mono text-ink"><Mark text={h.sku} terms={terms} /></span>
                     {h.manufacturerRef && <> · Fab : <span className="font-mono"><Mark text={h.manufacturerRef} terms={terms} /></span></>}
                     {h.brand && <> · {h.brand}</>}
                   </span>
+                  {showStock && <span className={cn("mt-0.5 block text-xs sm:hidden", h.available <= 0 ? "text-danger" : "text-steel")}>{h.available <= 0 ? "Rupture" : `Stock ${h.available}`}</span>}
                 </span>
-                {showStock && <span className={cn("shrink-0 rounded-full px-2 py-0.5 text-xs", h.available <= 0 ? "bg-red-50 text-danger" : "bg-mist text-steel")}>{h.available <= 0 ? "Rupture" : `Stock ${h.available}`}</span>}
-                <span className="w-28 shrink-0 text-right">
+                {showStock && <span className={cn("hidden shrink-0 rounded-full px-2 py-0.5 text-xs sm:inline", h.available <= 0 ? "bg-red-50 text-danger" : "bg-mist text-steel")}>{h.available <= 0 ? "Rupture" : `Stock ${h.available}`}</span>}
+                <span className="w-24 shrink-0 text-right sm:w-28">
                   {h.price == null ? <span className="text-xs text-steel">sur devis</span> : (
                     <>
                       <span className="block font-semibold tabular-nums">{formatTND(round3(h.price * (1 + h.vatRate / 100)))}</span>

@@ -43,13 +43,13 @@ export function ColumnChart({ data, format = defaultFormat, height = 200, axisLa
         <div className="flex w-14 shrink-0 flex-col justify-between py-0 text-right text-[11px] text-steel tabular-nums">
           {[...ticks].reverse().map((t) => <span key={t} className="-translate-y-1/2 first:translate-y-0 last:translate-y-0">{nf.format(t)}</span>)}
         </div>
-        <div className="relative flex-1">
+        <div className="relative min-w-0 flex-1">
           {ticks.map((t) => <div key={t} className="absolute inset-x-0 border-t border-line" style={{ bottom: `${(t / max) * 100}%` }} />)}
           <div className="absolute inset-0 flex items-end gap-0.5">
             {data.map((d, i) => (
               <div
                 key={d.label}
-                className="relative flex h-full flex-1 items-end justify-center"
+                className="relative flex h-full min-w-0 flex-1 items-end justify-center"
                 onMouseEnter={() => setHover(i)}
                 onMouseLeave={() => setHover(null)}
               >
@@ -71,7 +71,7 @@ export function ColumnChart({ data, format = defaultFormat, height = 200, axisLa
       </div>
       <div className="mt-2 flex gap-0.5 pl-16 text-[11px] text-steel">
         {data.map((d, i) => (
-          <span key={d.label} className="flex-1 truncate text-center">{data.length > 14 && i % Math.ceil(data.length / 7) !== 0 ? "" : d.label}</span>
+          <span key={d.label} className="min-w-0 flex-1 truncate text-center">{data.length > 14 && i % Math.ceil(data.length / 7) !== 0 ? "" : d.label}</span>
         ))}
       </div>
       <DataTable data={data} format={format} label={axisLabel} />

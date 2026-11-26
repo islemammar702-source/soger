@@ -47,12 +47,12 @@ export default async function DashboardPage() {
         <StatCard label="Alertes stock" value={`${d.outOfStock.length} rupture(s)`} sub={`${d.lowStock.length} sous le minimum`} tone={d.outOfStock.length ? "danger" : d.lowStock.length ? "warning" : "success"} href="/admin/stock?alerte=1" icon={<AlertTriangle className="size-4" />} />
       </div>
 
-      <div className="mt-6 grid gap-6 xl:grid-cols-[1.4fr_1fr]">
+      <div className="mt-6 grid grid-cols-[minmax(0,1fr)] gap-6 xl:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]">
         <Card title="Ventes des 30 derniers jours (TTC)"><AreaChart data={d.dailySeries} /></Card>
         <Card title="Chiffre d'affaires mensuel (TTC, 12 mois)"><ColumnChart data={d.monthlySeries} axisLabel="Mois" /></Card>
       </div>
 
-      <div className="mt-6 grid gap-6 lg:grid-cols-2 xl:grid-cols-3">
+      <div className="mt-6 grid grid-cols-[minmax(0,1fr)] gap-6 lg:grid-cols-2 xl:grid-cols-3">
         <Card title="Produits les plus vendus (mois, HT)"><RankBars data={d.topProducts} /></Card>
         <Card title="Ventes par catégorie (mois, HT)"><RankBars data={d.byCategory} /></Card>
         <Card title="Ruptures et stock faible" actions={<Link href="/admin/stock?alerte=1" className="text-xs font-medium text-accent">Tout voir</Link>} padded={false}>

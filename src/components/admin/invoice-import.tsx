@@ -61,7 +61,7 @@ export function InvoiceImport({ perms, aiEnabled, empty }: { perms: Perms; aiEna
 
   if (stage.name === "review") {
     return (
-      <div className="grid gap-5 2xl:grid-cols-[minmax(0,1fr)_520px]">
+      <div className="grid grid-cols-[minmax(0,1fr)] gap-5 2xl:grid-cols-[minmax(0,1fr)_520px]">
         <div className="min-w-0 space-y-4">
           <p role="status" className={cn("flex items-center gap-2 rounded-lg px-4 py-3 text-sm", stage.notice.ok ? "bg-accent-soft/60 text-accent-hover" : "bg-amber-50 text-amber-900")} data-testid="import-notice">
             <Sparkles className="size-4 shrink-0" /> {stage.notice.text}

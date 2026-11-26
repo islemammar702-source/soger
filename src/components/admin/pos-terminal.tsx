@@ -285,8 +285,8 @@ export function PosTerminal({ sessionId, canDiscount, canCreateCustomer, initial
   }
 
   return (
-    <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_380px] 2xl:grid-cols-[minmax(0,1fr)_420px]">
-      <div className="space-y-5">
+    <div className="grid grid-cols-[minmax(0,1fr)] gap-5 xl:grid-cols-[minmax(0,1fr)_380px] 2xl:grid-cols-[minmax(0,1fr)_420px]">
+      <div className="min-w-0 space-y-5">
         {/* 1. Client */}
         <section className="rounded-xl border border-line bg-white p-4">
           <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
