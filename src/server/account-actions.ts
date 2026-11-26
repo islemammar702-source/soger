@@ -105,6 +105,15 @@ export async function loginAction(_: FormState, form: FormData): Promise<FormSta
   }
   const [user] = await db.select().from(users).where(eq(users.email, email));
   const ok = await verifyPassword(password, user?.passwordHash);
+  // Bon mot de passe mais mauvaise entrée : on l'indique (le mot de passe étant correct, rien n'est révélé à un tiers).
+  if (user && ok && user.isActive && user.kind !== area) {
+    return {
+      status: "error",
+      message: user.kind === "staff"
+        ? "Ce compte est un compte du personnel SOGER : connectez-vous sur la page de gestion, /admin/connexion."
+        : "Ce compte est un compte client : connectez-vous depuis l'espace client du site, /compte/connexion.",
+    };
+  }
   if (!user || !ok || !user.isActive || user.kind !== area) {
     await audit({ userId: user?.id ?? null, module: "auth", action: "login_failed", entityType: "email", entityId: email });
     return { status: "error", message: "E-mail ou mot de passe incorrect." };
