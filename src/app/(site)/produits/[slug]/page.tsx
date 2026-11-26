@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { Suspense } from "react";
 import { FileText, MessageCircle, PackageCheck, Repeat2, ShieldCheck, Wrench } from "lucide-react";
 import { AddToCartForm } from "@/components/site/add-to-cart";
 import { PageHero } from "@/components/site/page-hero";
@@ -22,7 +23,20 @@ export async function generateMetadata({ params }: PageProps<"/produits/[slug]">
   return p ? { title: `${p.name} – ${p.sku}`, description: p.shortDescription ?? undefined } : {};
 }
 
-export default async function ProductPage({ params }: PageProps<"/produits/[slug]">) {
+/**
+ * Le contenu lit `params` : il est rendu dans un <Suspense> pour que la
+ * navigation affiche immédiatement un squelette, même pour les fiches
+ * non pré-générées.
+ */
+export default function ProductPage({ params }: PageProps<"/produits/[slug]">) {
+  return (
+    <Suspense fallback={<ProductSkeleton />}>
+      <ProductContent params={params} />
+    </Suspense>
+  );
+}
+
+async function ProductContent({ params }: { params: PageProps<"/produits/[slug]">["params"] }) {
   const { slug } = await params;
   const [p, categories] = await Promise.all([getProduct(slug), getCategories()]);
   if (!p) notFound();
@@ -158,5 +172,28 @@ function RelatedSection({ title, description, icon, items, iconOf }: {
         {items.map((r) => <ProductCard key={r.id} product={r} icon={iconOf.get(r.categorySlug ?? "")} />)}
       </div>
     </section>
+  );
+}
+
+function ProductSkeleton() {
+  return (
+    <div aria-busy>
+      <section className="bg-ink">
+        <div className="container-soger py-10 sm:py-14">
+          <div className="h-3 w-48 animate-pulse rounded bg-white/10" />
+          <div className="mt-5 h-10 w-2/3 animate-pulse rounded bg-white/10" />
+        </div>
+      </section>
+      <section className="container-soger grid gap-10 py-10 lg:grid-cols-2 lg:py-14">
+        <div className="aspect-square animate-pulse rounded-[var(--radius-card)] bg-mist" />
+        <div className="space-y-4">
+          <div className="h-4 w-24 animate-pulse rounded bg-mist" />
+          <div className="h-4 w-64 animate-pulse rounded bg-mist" />
+          <div className="h-4 w-56 animate-pulse rounded bg-mist" />
+          <div className="mt-8 h-44 animate-pulse rounded-[var(--radius-card)] bg-mist" />
+          <div className="h-16 animate-pulse rounded bg-mist" />
+        </div>
+      </section>
+    </div>
   );
 }

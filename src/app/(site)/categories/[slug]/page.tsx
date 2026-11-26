@@ -15,7 +15,32 @@ export async function generateMetadata({ params }: PageProps<"/categories/[slug]
   return category ? { title: category.name, description: category.description ?? undefined } : {};
 }
 
-export default async function CategoryPage({ params, searchParams }: PageProps<"/categories/[slug]">) {
+export default function CategoryPage({ params, searchParams }: PageProps<"/categories/[slug]">) {
+  return (
+    <Suspense fallback={<CategorySkeleton />}>
+      <CategoryContent params={params} searchParams={searchParams} />
+    </Suspense>
+  );
+}
+
+function CategorySkeleton() {
+  return (
+    <div aria-busy>
+      <section className="bg-ink">
+        <div className="container-soger py-10 sm:py-14">
+          <div className="h-3 w-40 animate-pulse rounded bg-white/10" />
+          <div className="mt-5 h-10 w-1/2 animate-pulse rounded bg-white/10" />
+          <div className="mt-4 h-4 w-1/3 animate-pulse rounded bg-white/10" />
+        </div>
+      </section>
+      <section className="container-soger py-10 lg:py-14">
+        <ProductGridSkeleton />
+      </section>
+    </div>
+  );
+}
+
+async function CategoryContent({ params, searchParams }: PageProps<"/categories/[slug]">) {
   const { slug } = await params;
   const category = await getCategory(slug);
   if (!category) notFound();
