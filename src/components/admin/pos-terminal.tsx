@@ -219,7 +219,7 @@ export function PosTerminal({ sessionId, canDiscount, canCreateCustomer, initial
         <section className="rounded-xl border border-line bg-white">
           <div className="border-b border-line p-4">
             <h2 className="mb-3 flex items-center gap-2 text-sm font-semibold"><Package className="size-4 text-accent" /> 2. Produits vendus</h2>
-            <ProductPicker onPick={add} customerId={customer?.id} autoFocus inputRef={searchRef} tabSelects placeholder="Tapez quelques lettres : nom, référence SOGER, référence fabricant ou code-barres (F2)…" />
+            <ProductPicker onPick={add} customerId={customer?.id} autoFocus inputRef={searchRef} tabSelects placeholder="Tapez les premières lettres du nom ou de la référence du produit (F2)…" />
             {notice && <p role="status" className="mt-2 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-800">{notice}</p>}
           </div>
           <div className="overflow-x-auto">
@@ -228,7 +228,7 @@ export function PosTerminal({ sessionId, canDiscount, canCreateCustomer, initial
                 <tr><th className="w-14 p-3" /><th className="p-3 text-left">Produit</th><th className="p-3 text-left">Réf. SOGER</th><th className="p-3 text-left">Réf. fabricant</th><th className="p-3 text-left">Marque</th><th className="p-3 text-center">Qté</th><th className="p-3 text-right">PU HT</th><th className="w-20 p-3 text-right">Remise %</th><th className="p-3 text-right">Sous-total TTC</th><th /></tr>
               </thead>
               <tbody>
-                {lines.length === 0 && <tr><td colSpan={10} className="p-10 text-center text-steel">Scannez un code-barres ou recherchez un produit du catalogue.</td></tr>}
+                {lines.length === 0 && <tr><td colSpan={10} className="p-10 text-center text-steel">Aucun produit pour l&apos;instant. Écrivez le nom ou la référence d&apos;un produit dans la recherche ci-dessus, puis choisissez-le dans la liste.</td></tr>}
                 {lines.map((l, i) => (
                   <tr key={l.productId} data-testid="sale-line" className={cn("border-t border-line align-middle transition-colors", flash?.id === l.productId && "animate-[pulse_0.6s_ease-out_1] bg-accent-soft/40")} onAnimationEnd={() => setFlash(null)}>
                     <td className="p-2">
@@ -273,6 +273,12 @@ export function PosTerminal({ sessionId, canDiscount, canCreateCustomer, initial
                 ))}
               </tbody>
             </table>
+          </div>
+          <div className="flex items-center justify-between gap-3 border-t border-line px-4 py-3">
+            <button type="button" onClick={() => searchRef.current?.focus()} className="inline-flex items-center gap-1.5 text-sm font-medium text-accent hover:underline">
+              <Plus className="size-4" /> Ajouter un produit
+            </button>
+            {lines.length > 0 && <span className="text-xs text-steel">{lines.length} produit(s) · {lines.reduce((n, l) => n + l.quantity, 0)} article(s)</span>}
           </div>
         </section>
         <p className="text-xs text-steel">

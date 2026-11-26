@@ -35,11 +35,12 @@ function Mark({ text, terms }: { text: string; terms: string[] }) {
 }
 
 /**
- * Recherche produit (nom, référence SOGER, référence fabricant, code-barres) avec suggestions instantanées.
+ * Recherche produit au clavier (nom, référence SOGER, référence fabricant) avec suggestions instantanées.
+ * Aucun matériel requis ; si un code-barres est renseigné sur la fiche, il est aussi reconnu, sans être obligatoire.
  * Clavier : ↑/↓ parcourir · Entrée choisir · Tab choisir puis passer à la quantité (si `onPick` le gère) · Échap fermer.
- * Lecteur code-barres : saisie + Entrée immédiate → produit exact ajouté.
+ * Entrée tapée avant l'affichage des suggestions : recherche immédiate, ajout direct si une seule référence correspond.
  */
-export function ProductPicker({ onPick, customerId, placeholder = "Ajouter un produit : référence, nom ou code-barres…", autoFocus, inputRef, tabSelects = false, showStock = true }: { onPick: (p: ProductHit, via: PickVia) => void; customerId?: number | null; placeholder?: string; autoFocus?: boolean; inputRef?: React.RefObject<HTMLInputElement | null>; tabSelects?: boolean; showStock?: boolean }) {
+export function ProductPicker({ onPick, customerId, placeholder = "Ajouter un produit : nom ou référence…", autoFocus, inputRef, tabSelects = false, showStock = true }: { onPick: (p: ProductHit, via: PickVia) => void; customerId?: number | null; placeholder?: string; autoFocus?: boolean; inputRef?: React.RefObject<HTMLInputElement | null>; tabSelects?: boolean; showStock?: boolean }) {
   const [q, setQ] = useState("");
   const [hits, setHits] = useState<ProductHit[]>([]);
   const [open, setOpen] = useState(false);
@@ -122,7 +123,7 @@ export function ProductPicker({ onPick, customerId, placeholder = "Ajouter un pr
             if (!term) return;
             // Résultats à jour pour ce texte : on prend la suggestion surlignée.
             if (showList && searched === term && hits[active]) return pick(hits[active], "enter");
-            // Sinon (lecteur code-barres, frappe très rapide) : recherche immédiate.
+            // Sinon (Entrée tapée très vite) : recherche immédiate.
             setLoading(true);
             try {
               const items = await searchProducts(term, customerId);

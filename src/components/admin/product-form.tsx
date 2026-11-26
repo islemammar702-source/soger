@@ -115,7 +115,7 @@ export function ProductForm({ values, categories, brands, canPublish, canSeeCost
             <Field label="Désignation" error={err("name")} className="sm:col-span-2"><Input name="name" defaultValue={values.name} invalid={!!err("name")} /></Field>
             <Field label="Référence SOGER" error={err("sku")}><Input name="sku" defaultValue={values.sku} className="font-mono uppercase" invalid={!!err("sku")} /></Field>
             <Field label="Référence fabricant" optional><Input name="manufacturerRef" defaultValue={values.manufacturerRef} className="font-mono" /></Field>
-            <Field label="Code-barres (EAN)" optional error={err("barcode")}><Input name="barcode" defaultValue={values.barcode} inputMode="numeric" className="font-mono" invalid={!!err("barcode")} /></Field>
+            <Field label="Code-barres (EAN)" optional hint="Non obligatoire : la caisse retrouve le produit par son nom ou sa référence." error={err("barcode")}><Input name="barcode" defaultValue={values.barcode} inputMode="numeric" className="font-mono" invalid={!!err("barcode")} /></Field>
             <Field label="Adresse de la page (slug)" optional hint="Généré automatiquement si vide" error={err("slug")}><Input name="slug" defaultValue={values.slug} invalid={!!err("slug")} /></Field>
             <Field label="Catégorie">
               <Select name="categoryId" defaultValue={values.categoryId}>
