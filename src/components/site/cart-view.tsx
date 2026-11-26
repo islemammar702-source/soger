@@ -2,7 +2,8 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { useActionState, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
+import { useFormAction } from "@/components/ui/form";
 import { AlertCircle, ArrowRight, CheckCircle2, FileText, Loader2, Minus, Plus, ShoppingCart, Trash2 } from "lucide-react";
 import { cart, cartTotals, useCart, type CartItem } from "@/lib/cart";
 import { submitCartQuote, type CartQuoteState } from "@/server/cart-quote";
@@ -118,15 +119,13 @@ export function CartView() {
         {totals.hasPriceOnRequest && <p className="mt-2 text-xs text-steel">Certains articles sont sur devis et ne sont pas inclus dans le total.</p>}
 
         <div className="mt-5 space-y-2.5">
-          <button
-            type="button"
-            disabled
-            title="La commande en ligne arrive à la prochaine étape"
-            className="inline-flex h-12 w-full items-center justify-center gap-2 rounded-lg bg-accent font-medium text-white opacity-50"
+          <Link
+            href="/commande"
+            className="inline-flex h-12 w-full items-center justify-center gap-2 rounded-lg bg-accent font-medium text-white shadow-[0_8px_20px_-8px_rgb(22_163_74/0.6)] transition hover:bg-accent-hover"
           >
             Commander <ArrowRight className="size-4" />
-          </button>
-          <p className="text-center text-xs text-steel">Paiement et livraison en ligne : bientôt disponibles.</p>
+          </Link>
+          <p className="text-center text-xs text-steel">Retrait en magasin ou livraison · paiement au retrait, à la livraison ou par virement</p>
           <button
             type="button"
             onClick={() => setQuoteOpen((v) => !v)}
@@ -212,7 +211,7 @@ const field =
   "h-11 w-full rounded-lg border border-line bg-white px-3.5 text-sm outline-none transition focus:border-accent focus:ring-4 focus:ring-accent/10 aria-[invalid=true]:border-danger";
 
 function CartQuoteForm({ items, onSent }: { items: CartItem[]; onSent: (n: string) => void }) {
-  const [state, action, pending] = useActionState<CartQuoteState, FormData>(async (prev: CartQuoteState, form: FormData) => {
+  const [state, onSubmit, pending] = useFormAction<CartQuoteState>(async (prev: CartQuoteState, form: FormData) => {
     const result = await submitCartQuote(prev, form);
     if (result.status === "success") {
       onSent(result.number);
@@ -222,7 +221,7 @@ function CartQuoteForm({ items, onSent }: { items: CartItem[]; onSent: (n: strin
   }, { status: "idle" });
   const err = (k: string) => (state.status === "error" ? state.fieldErrors?.[k]?.[0] : undefined);
   return (
-    <form action={action} className="mt-5 space-y-3 border-t border-line pt-5" noValidate>
+    <form onSubmit={onSubmit} className="mt-5 space-y-3 border-t border-line pt-5" noValidate>
       <input type="hidden" name="items" value={JSON.stringify(items.map((i) => ({ productId: i.productId, quantity: i.quantity })))} />
       <input name="name" placeholder="Nom et prénom" autoComplete="name" className={field} aria-invalid={!!err("name")} aria-label="Nom et prénom" />
       {err("name") && <p className="text-xs text-danger">{err("name")}</p>}

@@ -5,6 +5,7 @@ import type { ProductCardData } from "@/server/catalog";
 import { cn, formatTND, withVat } from "@/lib/utils";
 import { AddToCartIcon, type CartProduct } from "./add-to-cart";
 import { CategoryIcon } from "./category-icon";
+import { ProPrice } from "./pro-price";
 
 export function availabilityOf(p: Pick<ProductCardData, "available" | "minStock">) {
   const qty = Number(p.available);
@@ -81,6 +82,7 @@ export function ProductCard({ product, icon, layout = "grid" }: { product: Produ
               <>
                 <p className="font-display text-lg font-bold text-ink">{formatTND(price)}</p>
                 <p className="text-[11px] text-steel">TTC / {product.unit}</p>
+                <ProPrice productId={product.id} publicHT={product.salePrice} className="mt-1 text-[11px] font-semibold text-accent-hover" />
               </>
             ) : (
               <p className="text-sm font-medium text-steel">Prix sur devis</p>

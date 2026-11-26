@@ -1,15 +1,15 @@
 "use client";
 
-import { useActionState } from "react";
 import { CheckCircle2, Loader2, Send } from "lucide-react";
 import { submitQuoteRequest, type QuoteRequestState } from "@/server/quote-request";
 import { cn } from "@/lib/utils";
+import { useFormAction } from "@/components/ui/form";
 
 const field =
   "h-11 w-full rounded-lg border border-line bg-white px-3.5 text-sm text-ink outline-none transition placeholder:text-steel/70 focus:border-accent focus:ring-4 focus:ring-accent/10 aria-[invalid=true]:border-danger";
 
 export function QuoteForm({ defaultReferences = "", className }: { defaultReferences?: string; className?: string }) {
-  const [state, action, pending] = useActionState<QuoteRequestState, FormData>(submitQuoteRequest, { status: "idle" });
+  const [state, onSubmit, pending] = useFormAction<QuoteRequestState>(submitQuoteRequest, { status: "idle" });
 
   if (state.status === "success") {
     return (
@@ -26,7 +26,7 @@ export function QuoteForm({ defaultReferences = "", className }: { defaultRefere
   const err = (k: string) => (state.status === "error" ? state.fieldErrors?.[k]?.[0] : undefined);
 
   return (
-    <form action={action} className={cn("rounded-[var(--radius-card)] border border-line bg-white p-5 shadow-soft sm:p-7", className)} noValidate>
+    <form onSubmit={onSubmit} className={cn("rounded-[var(--radius-card)] border border-line bg-white p-5 shadow-soft sm:p-7", className)} noValidate>
       <div className="grid gap-4 sm:grid-cols-2">
         <Field label="Nom et prénom" error={err("name")}>
           <input name="name" autoComplete="name" required className={field} aria-invalid={!!err("name")} />

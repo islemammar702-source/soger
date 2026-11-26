@@ -4,6 +4,8 @@ import { notFound } from "next/navigation";
 import { Suspense } from "react";
 import { FileText, MessageCircle, PackageCheck, Repeat2, ShieldCheck, Wrench } from "lucide-react";
 import { AddToCartForm } from "@/components/site/add-to-cart";
+import { FavoriteButton } from "@/components/site/favorite-button";
+import { ProPrice } from "@/components/site/pro-price";
 import { PageHero } from "@/components/site/page-hero";
 import { ProductGallery } from "@/components/site/product-gallery";
 import { availabilityOf, ProductCard, toCartProduct } from "@/components/site/product-card";
@@ -59,7 +61,10 @@ async function ProductContent({ params }: { params: PageProps<"/produits/[slug]"
         <ProductGallery images={p.images} name={p.name} icon={icon} />
 
         <div>
-          <p className="text-sm font-semibold tracking-wide text-steel uppercase">{p.brandName}</p>
+          <div className="flex items-center justify-between gap-3">
+            <p className="text-sm font-semibold tracking-wide text-steel uppercase">{p.brandName}</p>
+            <FavoriteButton productId={p.id} slug={p.slug} />
+          </div>
           <dl className="mt-4 grid grid-cols-[auto_1fr] gap-x-8 gap-y-2 text-sm">
             <dt className="text-steel">Référence SOGER</dt><dd className="font-mono font-medium">{p.sku}</dd>
             {p.manufacturerRef && (<><dt className="text-steel">Réf. fabricant</dt><dd className="font-mono font-medium">{p.manufacturerRef}</dd></>)}
@@ -74,6 +79,7 @@ async function ProductContent({ params }: { params: PageProps<"/produits/[slug]"
                 <div>
                   <p className="font-display text-3xl font-bold">{formatTND(price)}</p>
                   <p className="text-xs text-steel">TTC / {p.unit} · {formatTND(p.salePrice)} HT · TVA {Number(p.vatRate)} %</p>
+                  <ProPrice productId={p.id} publicHT={p.salePrice} />
                 </div>
               ) : (
                 <p className="text-lg font-semibold text-steel">Prix sur devis</p>
