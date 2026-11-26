@@ -2,6 +2,7 @@
 
 import { and, eq, sql } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
+import { redirect } from "next/navigation";
 import { z } from "zod";
 import { db } from "@/db";
 import { brands, invoiceItems, invoices, mediaFiles, productSuppliers, products, purchaseOrders, suppliers, warehouses } from "@/db/schema";
@@ -12,6 +13,7 @@ import { AccessDenied, assertStaff } from "../auth/dal";
 import { recordPayment } from "../finance";
 import { applyStockMovement } from "../inventory";
 import { ExtractionError, aiEnabled, extractInvoice, type ExtractedInvoice } from "../invoice-ai";
+import { readPdfInvoice } from "../invoice-pdf";
 import { BusinessError, defaultWarehouseId } from "../orders";
 import { nextDocumentNumber } from "../sequences";
 import { buildDraft, normRef, type InvoiceDraft } from "./supplier-invoice-match";
@@ -58,7 +60,7 @@ export async function uploadInvoiceFileAction(form: FormData): Promise<UploadRes
 /* ─── 2. Lecture automatique + rapprochement ────────────────────────── */
 
 export type { DraftLine, InvoiceDraft } from "./supplier-invoice-match";
-export type ExtractResult = { ok: true; draft: InvoiceDraft; duplicate: string | null; raw: ExtractedInvoice } | { ok: false; message: string; disabled?: boolean };
+export type ExtractResult = { ok: true; draft: InvoiceDraft; duplicate: string | null; raw: ExtractedInvoice; source: "ai" | "text" } | { ok: false; message: string; disabled?: boolean };
 
 
 /** Lit le fichier avec l'IA et renvoie un brouillon modifiable. Rien n'est enregistré. */
@@ -68,21 +70,36 @@ export async function extractInvoiceAction(fileId: number): Promise<ExtractResul
   } catch (e) {
     return { ok: false, message: denied(e) ?? "Accès refusé." };
   }
-  if (!aiEnabled()) return { ok: false, disabled: true, message: "Reconnaissance automatique non configurée : saisissez les informations à partir de l'aperçu (ajoutez ANTHROPIC_API_KEY pour l'activer)." };
   const [f] = await db.select({ data: mediaFiles.data, mimeType: mediaFiles.mimeType, isPrivate: mediaFiles.isPrivate }).from(mediaFiles).where(eq(mediaFiles.id, Number(fileId)));
   if (!f || !f.isPrivate) return { ok: false, message: "Fichier introuvable." };
-  let x: ExtractedInvoice;
-  try {
-    x = await extractInvoice(f);
-  } catch (e) {
-    if (e instanceof ExtractionError) return { ok: false, message: e.message };
-    console.error("extractInvoiceAction", e);
-    return { ok: false, message: "Lecture automatique impossible. Saisissez la facture manuellement." };
+  const isPdf = f.mimeType === "application/pdf";
+  let x: ExtractedInvoice | null = null;
+  let source: "ai" | "text" = "ai";
+  let aiError: string | null = null;
+  // 1. Lecture IA (PDF et photos) si la clé est configurée.
+  if (aiEnabled()) {
+    try {
+      x = await extractInvoice(f);
+    } catch (e) {
+      if (!(e instanceof ExtractionError)) console.error("extractInvoiceAction", e);
+      aiError = e instanceof ExtractionError ? e.message : "Lecture automatique impossible.";
+    }
   }
-
+  // 2. Sinon (ou en secours) : lecture gratuite du texte du PDF.
+  if (!x && isPdf) {
+    x = await readPdfInvoice(f.data);
+    source = "text";
+    if (x && aiError) x.warnings.unshift(`Lecture IA indisponible (${aiError}) : lecture du texte du PDF utilisée.`);
+  }
+  if (!x) {
+    if (aiError) return { ok: false, message: aiError };
+    return isPdf
+      ? { ok: false, message: "Ce PDF ne contient pas de texte lisible (document scanné) : la lecture automatique demande l'IA (clé ANTHROPIC_API_KEY). Complétez le formulaire à partir de l'aperçu." }
+      : { ok: false, disabled: true, message: "La lecture automatique d'une photo demande l'IA (clé ANTHROPIC_API_KEY). Complétez le formulaire à partir de l'aperçu." };
+  }
   const draft = await buildDraft(x);
   // `raw` est renvoyé avec la facture validée et conservé (historique de la reconnaissance).
-  return { ok: true, draft, raw: x, duplicate: await findDuplicate(draft.supplier.id, draft.supplier.name, draft.externalRef) };
+  return { ok: true, draft, raw: x, source, duplicate: await findDuplicate(draft.supplier.id, draft.supplier.name, draft.externalRef) };
 }
 
 /** Facture déjà saisie ? (même fournisseur + même numéro, hors factures annulées) */
@@ -365,4 +382,40 @@ export async function supplierPurchaseOrdersAction(supplierId: number): Promise<
     .where(and(eq(purchaseOrders.supplierId, Number(supplierId)), sql`${purchaseOrders.status} <> 'cancelled'`))
     .orderBy(sql`${purchaseOrders.createdAt} desc`)
     .limit(20);
+}
+
+/* ─── 7. Suppression du fichier importé ─────────────────────────────── */
+
+/** Supprime un fichier importé qui n'est rattaché à aucune facture (erreur de fichier, mauvais document). */
+export async function deleteInvoiceFileAction(fileId: number): Promise<{ ok: boolean; message: string }> {
+  let me;
+  try {
+    me = await assertPurchaseInvoices();
+  } catch (e) {
+    return { ok: false, message: denied(e) ?? "Accès refusé." };
+  }
+  const id = Number(fileId);
+  const [f] = await db.select({ id: mediaFiles.id, isPrivate: mediaFiles.isPrivate, fileName: mediaFiles.fileName }).from(mediaFiles).where(eq(mediaFiles.id, id));
+  if (!f || !f.isPrivate) return { ok: false, message: "Fichier introuvable." };
+  const [used] = await db.select({ number: invoices.number }).from(invoices).where(eq(invoices.sourceFileId, id)).limit(1);
+  if (used) return { ok: false, message: `Ce fichier est l'original de la facture ${used.number} : retirez-le depuis la fiche de la facture.` };
+  await db.delete(mediaFiles).where(eq(mediaFiles.id, id));
+  await audit({ userId: me.id, module: "invoices", action: "delete_import_file", entityType: "media_file", entityId: id, oldValues: { fileName: f.fileName } });
+  return { ok: true, message: "Fichier supprimé." };
+}
+
+/** Retire (et supprime) le fichier original d'une facture déjà enregistrée. La facture elle-même est conservée. */
+export async function removeInvoiceOriginalAction(form: FormData) {
+  const me = await assertPurchaseInvoices();
+  const invoiceId = Number(form.get("invoiceId"));
+  const [inv] = await db.select({ id: invoices.id, number: invoices.number, fileId: invoices.sourceFileId }).from(invoices).where(and(eq(invoices.id, invoiceId), eq(invoices.kind, "supplier")));
+  if (!inv?.fileId) redirect(`/admin/factures/${invoiceId}?erreur=${encodeURIComponent("Aucun fichier original à retirer.")}`);
+  await db.transaction(async (tx) => {
+    await tx.update(invoices).set({ sourceFileId: null, updatedAt: new Date() }).where(eq(invoices.id, inv.id));
+    const [stillUsed] = await tx.select({ id: invoices.id }).from(invoices).where(eq(invoices.sourceFileId, inv.fileId!)).limit(1);
+    if (!stillUsed) await tx.delete(mediaFiles).where(eq(mediaFiles.id, inv.fileId!));
+    await audit({ userId: me.id, module: "invoices", action: "remove_original", entityType: "invoice", entityId: inv.id, oldValues: { fileId: inv.fileId } }, tx);
+  });
+  revalidatePath(`/admin/factures/${invoiceId}`);
+  redirect(`/admin/factures/${invoiceId}?ok=${encodeURIComponent("Fichier original retiré. La facture est conservée.")}`);
 }

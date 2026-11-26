@@ -115,6 +115,8 @@ export async function buildDraft(x: ExtractedInvoice): Promise<InvoiceDraft> {
   const sup = await matchSupplier(x.supplier.name, x.supplier.taxId);
   const matches = await matchProducts(x.lines.map((l) => ({ reference: l.reference, manufacturerRef: l.manufacturerRef, description: l.description })), sup?.id ?? null);
   const warnings = [...x.warnings];
+  // Facture émise par SOGER elle-même (facture de vente) : ce n'est pas une facture fournisseur.
+  if (/\bsoger\b/i.test(x.supplier.name ?? "")) warnings.unshift("Ce document semble émis par SOGER (facture de vente) : ce module enregistre les factures REÇUES de vos fournisseurs. Vérifiez qu'il s'agit bien d'une facture d'achat.");
   if (x.documentType !== "invoice") warnings.unshift(x.documentType === "credit_note" ? "Ce document semble être un avoir fournisseur : vérifiez avant d'enregistrer." : "Ce document ne semble pas être une facture (devis, bon de livraison…) : vérifiez avant d'enregistrer.");
 
   const lines: DraftLine[] = x.lines.map((l, i) => {

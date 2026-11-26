@@ -1,8 +1,8 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Camera, FileUp, Loader2, ScanLine, Sparkles, Video, X } from "lucide-react";
-import { extractInvoiceAction, uploadInvoiceFileAction, type InvoiceDraft } from "@/server/admin/supplier-invoices";
+import { Camera, FileUp, Loader2, RefreshCw, ScanLine, Sparkles, Trash2, Video, X } from "lucide-react";
+import { deleteInvoiceFileAction, extractInvoiceAction, uploadInvoiceFileAction, type InvoiceDraft } from "@/server/admin/supplier-invoices";
 import { cn } from "@/lib/utils";
 import { SupplierInvoiceForm } from "./supplier-invoice-form";
 
@@ -21,6 +21,7 @@ export function InvoiceImport({ perms, aiEnabled, empty }: { perms: Perms; aiEna
   const [error, setError] = useState<string | null>(null);
   const [over, setOver] = useState(false);
   const [webcam, setWebcam] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const fileInput = useRef<HTMLInputElement>(null);
   const cameraInput = useRef<HTMLInputElement>(null);
 
@@ -42,10 +43,11 @@ export function InvoiceImport({ perms, aiEnabled, empty }: { perms: Perms; aiEna
       setStage({ name: "pick" });
       return setError(up.message);
     }
-    if (!aiEnabled) {
-      return setStage({ name: "review", fileId: up.fileId, mimeType: up.mimeType, fileName: up.name, draft: empty, duplicate: null, notice: { ok: false, text: "Reconnaissance automatique non configurée : complétez le formulaire en vous aidant de l'aperçu." } });
+    // PDF : lecture du texte (gratuite) ou IA. Photo : IA uniquement.
+    if (!aiEnabled && up.mimeType !== "application/pdf") {
+      return setStage({ name: "review", fileId: up.fileId, mimeType: up.mimeType, fileName: up.name, draft: empty, duplicate: null, notice: { ok: false, text: "La lecture automatique d'une photo demande l'IA (clé ANTHROPIC_API_KEY) : complétez le formulaire en vous aidant de l'aperçu. Les factures PDF, elles, sont lues automatiquement." } });
     }
-    setStage({ name: "reading", step: "Lecture de la facture (fournisseur, lignes, totaux)… cela peut prendre jusqu'à une minute." });
+    setStage({ name: "reading", step: aiEnabled ? "Lecture de la facture (fournisseur, lignes, totaux)… cela peut prendre jusqu'à une minute." : "Lecture du PDF (fournisseur, lignes, totaux)…" });
     let r;
     try {
       r = await extractInvoiceAction(up.fileId);
@@ -53,10 +55,25 @@ export function InvoiceImport({ perms, aiEnabled, empty }: { perms: Perms; aiEna
       r = { ok: false as const, message: "Lecture automatique interrompue." };
     }
     if (r.ok) {
-      setStage({ name: "review", fileId: up.fileId, mimeType: up.mimeType, fileName: up.name, draft: r.draft, raw: r.raw, duplicate: r.duplicate, notice: { ok: true, text: `Lecture terminée : ${r.draft.lines.length} ligne(s) reconnue(s). Vérifiez chaque information avant d'enregistrer.` } });
+      const matched = r.draft.lines.filter((l) => l.productId).length;
+      setStage({ name: "review", fileId: up.fileId, mimeType: up.mimeType, fileName: up.name, draft: r.draft, raw: r.raw, duplicate: r.duplicate, notice: { ok: r.draft.lines.length > 0, text: `Formulaire rempli automatiquement${r.source === "text" ? " à partir du texte du PDF" : ""} : ${r.draft.lines.length} ligne(s) lue(s), dont ${matched} associée(s) à un produit SOGER. Vérifiez chaque information avant d'enregistrer.` } });
     } else {
       setStage({ name: "review", fileId: up.fileId, mimeType: up.mimeType, fileName: up.name, draft: empty, duplicate: null, notice: { ok: false, text: `${r.message} Le fichier est conservé : complétez le formulaire à partir de l'aperçu.` } });
     }
+  };
+
+  // Supprimer le fichier importé (aucune facture n'a encore été enregistrée) et revenir à l'import.
+  const discard = async (why: "delete" | "change") => {
+    if (stage.name !== "review") return;
+    const msg = why === "delete" ? `Supprimer le fichier « ${stage.fileName} » ? Les informations saisies dans le formulaire seront perdues.` : "Importer un autre fichier ? Le fichier actuel sera supprimé et le formulaire vidé.";
+    if (!confirm(msg)) return;
+    setDeleting(true);
+    const r = await deleteInvoiceFileAction(stage.fileId).catch(() => ({ ok: false, message: "Suppression impossible." }));
+    setDeleting(false);
+    if (!r.ok) return setError(r.message);
+    setError(null);
+    setStage({ name: "pick" });
+    if (why === "change") setTimeout(() => fileInput.current?.click(), 0);
   };
 
   if (stage.name === "review") {
@@ -66,13 +83,18 @@ export function InvoiceImport({ perms, aiEnabled, empty }: { perms: Perms; aiEna
           <p role="status" className={cn("flex items-center gap-2 rounded-lg px-4 py-3 text-sm", stage.notice.ok ? "bg-accent-soft/60 text-accent-hover" : "bg-amber-50 text-amber-900")} data-testid="import-notice">
             <Sparkles className="size-4 shrink-0" /> {stage.notice.text}
           </p>
-          <SupplierInvoiceForm draft={stage.draft} perms={perms} sourceFileId={stage.fileId} raw={stage.raw} duplicate={stage.duplicate} />
+          {error && <p role="alert" className="rounded-lg bg-red-50 px-4 py-3 text-sm text-danger">{error}</p>}
+          <SupplierInvoiceForm key={stage.fileId} draft={stage.draft} perms={perms} sourceFileId={stage.fileId} raw={stage.raw} duplicate={stage.duplicate} />
         </div>
         <aside className="2xl:sticky 2xl:top-20 2xl:self-start">
           <div className="overflow-hidden rounded-xl border border-line bg-white">
-            <div className="flex items-center justify-between gap-2 border-b border-line px-4 py-2.5 text-sm">
-              <span className="truncate font-medium" title={stage.fileName}>Original : {stage.fileName}</span>
-              <a href={`/media/${stage.fileId}`} target="_blank" className="shrink-0 text-xs font-medium text-accent">Ouvrir</a>
+            <div className="flex flex-wrap items-center justify-between gap-2 border-b border-line px-4 py-2.5 text-sm">
+              <span className="min-w-0 flex-1 truncate font-medium" title={stage.fileName}>Original : {stage.fileName}</span>
+              <span className="flex shrink-0 items-center gap-1">
+                <a href={`/media/${stage.fileId}`} target="_blank" className="rounded-md px-2 py-1 text-xs font-medium text-accent hover:bg-mist">Ouvrir</a>
+                <button type="button" onClick={() => discard("change")} disabled={deleting} className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium text-graphite hover:bg-mist disabled:opacity-50"><RefreshCw className="size-3.5" /> Changer de fichier</button>
+                <button type="button" onClick={() => discard("delete")} disabled={deleting} className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium text-danger hover:bg-red-50 disabled:opacity-50" data-testid="delete-file">{deleting ? <Loader2 className="size-3.5 animate-spin" /> : <Trash2 className="size-3.5" />} Supprimer le fichier</button>
+              </span>
             </div>
             {stage.mimeType === "application/pdf" ? (
               <iframe src={`/media/${stage.fileId}#view=FitH`} title="Aperçu de la facture" className="h-[78vh] w-full bg-mist" />
@@ -90,7 +112,7 @@ export function InvoiceImport({ perms, aiEnabled, empty }: { perms: Perms; aiEna
     <div className="mx-auto max-w-3xl space-y-4">
       {!aiEnabled && (
         <p className="rounded-lg bg-amber-50 px-4 py-3 text-sm text-amber-900">
-          La reconnaissance automatique n&apos;est pas encore activée (clé <code className="font-mono">ANTHROPIC_API_KEY</code> absente). Vous pouvez quand même importer la facture : elle sera conservée et affichée à côté du formulaire pour une saisie rapide.
+          Les <strong>factures PDF</strong> sont lues automatiquement. Pour lire aussi les <strong>photos et les PDF scannés</strong>, ajoutez la clé <code className="font-mono">ANTHROPIC_API_KEY</code> (lecture par IA).
         </p>
       )}
       <div

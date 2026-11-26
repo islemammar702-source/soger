@@ -5,6 +5,8 @@ import { db } from "@/db";
 import { invoiceItems, invoices, orders, payments } from "@/db/schema";
 import { Card, Flash, PageHeader, btn } from "@/components/admin/ui";
 import { Badge } from "@/components/ui/badge";
+import { ConfirmButton } from "@/components/admin/confirm-button";
+import { removeInvoiceOriginalAction } from "@/server/admin/supplier-invoices";
 import { INVOICE_STATUS, PAYMENT_METHOD, formatDate, formatDateTime, label } from "@/lib/labels";
 import { formatTND } from "@/lib/utils";
 import { addPaymentAction, creditNoteAction, deletePaymentAction } from "@/server/admin/sales";
@@ -70,7 +72,17 @@ export default async function InvoicePage({ params, searchParams }: PageProps<"/
               {f.externalRef && <li>N° facture fournisseur : <span className="font-mono">{f.externalRef}</span></li>}
               {f.billingTaxId && <li>Matricule fiscal : <span className="font-mono">{f.billingTaxId}</span></li>}
               {f.purchaseType && <li>Type : {PURCHASE_TYPE[f.purchaseType] ?? f.purchaseType}</li>}
-              {f.sourceFileId && <li>Original : <a href={`/media/${f.sourceFileId}`} target="_blank" className="text-accent">ouvrir</a> · <a href={`/media/${f.sourceFileId}?telecharger`} className="text-accent">télécharger</a></li>}
+              {f.sourceFileId && (
+                <li className="flex flex-wrap items-center gap-x-2">
+                  Original : <a href={`/media/${f.sourceFileId}`} target="_blank" className="text-accent">ouvrir</a> · <a href={`/media/${f.sourceFileId}?telecharger`} className="text-accent">télécharger</a>
+                  {me.can("invoices.create") && (
+                    <form action={removeInvoiceOriginalAction} className="inline">
+                      <input type="hidden" name="invoiceId" value={id} />
+                      · <ConfirmButton message="Retirer et supprimer le fichier original (PDF ou photo) ? La facture, ses lignes et ses paiements sont conservés." className="text-danger hover:underline">supprimer le fichier</ConfirmButton>
+                    </form>
+                  )}
+                </li>
+              )}
               {f.extractedData != null && <li className="text-xs text-steel">Saisie assistée par lecture automatique, vérifiée avant enregistrement.</li>}
               {f.creditedInvoiceId && <li>Avoir sur : <Link href={`/admin/factures/${f.creditedInvoiceId}`} className="text-accent">facture d&apos;origine</Link></li>}
               {credited.map((c) => <li key={c.id}>Avoir : <Link href={`/admin/factures/${c.id}`} className="font-mono text-accent">{c.number}</Link></li>)}
