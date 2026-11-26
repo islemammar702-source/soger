@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useEffect, useState, useSyncExternalStore } from "react";
+import { Suspense, useCallback, useEffect, useState, useSyncExternalStore } from "react";
 import { createPortal } from "react-dom";
 import { AnimatePresence, motion } from "motion/react";
 import { ChevronRight, FileText, Menu, ShoppingCart, User, X } from "lucide-react";
@@ -16,8 +16,18 @@ const noop = () => () => {};
 
 type NavCategory = { slug: string; name: string };
 
-export function Header({ categories }: { categories: NavCategory[] }) {
+/**
+ * Lit l'URL courante dans son propre <Suspense> : le reste du header peut ainsi
+ * être pré-rendu statiquement, y compris sur les pages générées à la demande.
+ */
+function PathnameWatcher({ onChange }: { onChange: (p: string) => void }) {
   const pathname = usePathname();
+  useEffect(() => onChange(pathname), [pathname, onChange]);
+  return null;
+}
+
+export function Header({ categories }: { categories: NavCategory[] }) {
+  const [pathname, setPathname] = useState("");
   const [scrolled, setScrolled] = useState(false);
   const [open, setOpen] = useState(false);
   const cartCount = useCartCount();
@@ -31,17 +41,16 @@ export function Header({ categories }: { categories: NavCategory[] }) {
   }, []);
 
   // Ferme le menu mobile à chaque navigation.
-  const [lastPath, setLastPath] = useState(pathname);
-  if (lastPath !== pathname) {
-    setLastPath(pathname);
+  const onPathChange = useCallback((p: string) => {
+    setPathname(p);
     setOpen(false);
-  }
+  }, []);
 
   useEffect(() => {
     document.body.style.overflow = open ? "hidden" : "";
   }, [open]);
 
-  const isActive = (href: string) => (href === "/" ? pathname === "/" : pathname.startsWith(href));
+  const isActive = (href: string) => !!pathname && (href === "/" ? pathname === "/" : pathname.startsWith(href));
 
   return (
     <header
@@ -50,6 +59,9 @@ export function Header({ categories }: { categories: NavCategory[] }) {
         scrolled ? "border-line shadow-[0_8px_30px_-20px_rgb(17_24_39/0.35)]" : "border-transparent",
       )}
     >
+      <Suspense fallback={null}>
+        <PathnameWatcher onChange={onPathChange} />
+      </Suspense>
       <div className="container-soger flex h-16 items-center gap-4 lg:h-[72px] lg:gap-8">
         <Logo />
 

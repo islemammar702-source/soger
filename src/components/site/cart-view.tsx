@@ -8,6 +8,7 @@ import { AlertCircle, ArrowRight, CheckCircle2, FileText, Loader2, Minus, Plus, 
 import { cart, cartTotals, useCart, type CartItem } from "@/lib/cart";
 import { submitCartQuote, type CartQuoteState } from "@/server/cart-quote";
 import { cn, formatTND, withVat } from "@/lib/utils";
+import { isOptimizable } from "@/lib/utils";
 import { CategoryIcon } from "./category-icon";
 
 type Fresh = Omit<CartItem, "quantity"> & { available: number };
@@ -148,7 +149,7 @@ function CartLine({ item, available }: { item: CartItem; available?: number }) {
     <li className="flex gap-4 p-4">
       <Link href={`/produits/${item.slug}`} className="relative grid size-20 shrink-0 place-items-center overflow-hidden rounded-lg bg-mist sm:size-24">
         {item.imageUrl ? (
-          <Image src={item.imageUrl} alt="" fill sizes="96px" className="object-contain p-2" />
+          <Image unoptimized={!isOptimizable(item.imageUrl)} src={item.imageUrl} alt="" fill sizes="96px" className="object-contain p-2" />
         ) : (
           <CategoryIcon name={item.icon} className="size-9 text-steel/40" />
         )}

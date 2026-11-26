@@ -6,6 +6,7 @@ import { useEffect, useState, useSyncExternalStore } from "react";
 import { createPortal } from "react-dom";
 import { ChevronLeft, ChevronRight, Expand, X } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { isOptimizable } from "@/lib/utils";
 import { CategoryIcon } from "./category-icon";
 
 type Img = { url: string; alt: string | null };
@@ -63,6 +64,7 @@ export function ProductGallery({ images, name, icon }: { images: Img[]; name: st
         className="group relative block aspect-square w-full cursor-zoom-in overflow-hidden rounded-[var(--radius-card)] border border-line bg-gradient-to-br from-mist to-white"
       >
         <Image
+          unoptimized={!isOptimizable(current.url)}
           src={current.url}
           alt={current.alt ?? name}
           fill
@@ -90,7 +92,7 @@ export function ProductGallery({ images, name, icon }: { images: Img[]; name: st
                 i === index ? "border-accent ring-2 ring-accent/20" : "border-line hover:border-ink/30",
               )}
             >
-              <Image src={img.url} alt="" fill sizes="80px" className="object-contain p-1.5" />
+              <Image unoptimized={!isOptimizable(img.url)} src={img.url} alt="" fill sizes="80px" className="object-contain p-1.5" />
             </button>
           ))}
         </div>
@@ -124,7 +126,7 @@ export function ProductGallery({ images, name, icon }: { images: Img[]; name: st
                     if (info.offset.x > 80) go(-1);
                   }}
                 >
-                  <Image src={current.url} alt={current.alt ?? name} fill sizes="100vw" className="object-contain p-4 sm:p-10" />
+                  <Image unoptimized={!isOptimizable(current.url)} src={current.url} alt={current.alt ?? name} fill sizes="100vw" className="object-contain p-4 sm:p-10" />
                 </motion.div>
                 {images.length > 1 && (
                   <>

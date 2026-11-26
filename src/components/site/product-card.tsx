@@ -3,6 +3,7 @@ import Image from "next/image";
 import { FileText } from "lucide-react";
 import type { ProductCardData } from "@/server/catalog";
 import { cn, formatTND, withVat } from "@/lib/utils";
+import { isOptimizable } from "@/lib/utils";
 import { AddToCartIcon, type CartProduct } from "./add-to-cart";
 import { CategoryIcon } from "./category-icon";
 import { ProPrice } from "./pro-price";
@@ -49,7 +50,7 @@ export function ProductCard({ product, icon, layout = "grid" }: { product: Produ
         aria-hidden
       >
         {product.imageUrl ? (
-          <Image src={product.imageUrl} alt="" fill sizes={list ? "176px" : "(min-width: 1280px) 25vw, (min-width: 640px) 50vw, 100vw"} className="object-contain p-4 transition duration-500 group-hover:scale-105" />
+          <Image unoptimized={!isOptimizable(product.imageUrl)} src={product.imageUrl} alt="" fill sizes={list ? "176px" : "(min-width: 1280px) 25vw, (min-width: 640px) 50vw, 100vw"} className="object-contain p-4 transition duration-500 group-hover:scale-105" />
         ) : (
           <div className="grid h-full place-items-center">
             <CategoryIcon name={icon} className={cn("text-steel/35 transition duration-500 group-hover:scale-110 group-hover:text-accent/60", list ? "size-10" : "size-14")} />

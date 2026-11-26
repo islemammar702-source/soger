@@ -2,6 +2,7 @@ import "server-only";
 import { createHash, randomBytes } from "node:crypto";
 import { and, eq, gt, lt } from "drizzle-orm";
 import { cookies, headers } from "next/headers";
+import { connection } from "next/server";
 import { db } from "@/db";
 import { sessions, users } from "@/db/schema";
 
@@ -36,6 +37,8 @@ export async function createSession(userId: number) {
 
 /** Utilisateur de la session courante (ou null). Prolonge la session si elle approche de l'expiration. */
 export async function readSession() {
+  // La validité d'une session dépend de l'heure courante : lecture strictement à la requête.
+  await connection();
   const token = (await cookies()).get(SESSION_COOKIE)?.value;
   if (!token || token.length > 100) return null;
   const id = hashToken(token);

@@ -32,3 +32,6 @@ export function slugify(v: string) {
 
 /** Arrondi à 2 décimales : coordonnées SVG identiques côté serveur et navigateur. */
 export const round2 = (n: number) => Math.round(n * 100) / 100;
+
+/** Les images Cloudinary et locales passent par l'optimiseur Next ; les autres adresses sont servies telles quelles. */
+export const isOptimizable = (url: string) => url.startsWith("/") || url.startsWith("https://res.cloudinary.com/");
