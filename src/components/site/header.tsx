@@ -5,7 +5,7 @@ import { usePathname } from "next/navigation";
 import { Suspense, useCallback, useEffect, useState, useSyncExternalStore } from "react";
 import { createPortal } from "react-dom";
 import { AnimatePresence, motion } from "motion/react";
-import { ChevronRight, FileText, Menu, ShoppingCart, User, X } from "lucide-react";
+import { ChevronRight, FileText, LayoutDashboard, Menu, ShoppingCart, User, X } from "lucide-react";
 import { mainNav } from "@/config/site";
 import { cn } from "@/lib/utils";
 import { useCartCount } from "@/lib/cart";
@@ -72,7 +72,7 @@ export function Header({ categories }: { categories: NavCategory[] }) {
               href={item.href}
               aria-current={isActive(item.href) ? "page" : undefined}
               className={cn(
-                "relative rounded-md px-3 py-2 text-sm font-medium transition-colors",
+                "relative rounded-md px-3 py-2 text-sm font-medium whitespace-nowrap transition-colors",
                 isActive(item.href) ? "text-ink" : "text-steel hover:text-ink",
               )}
             >
@@ -92,6 +92,16 @@ export function Header({ categories }: { categories: NavCategory[] }) {
             className="hidden h-10 items-center gap-2 rounded-lg px-3 text-sm font-medium text-ink transition hover:bg-mist lg:flex"
           >
             <FileText className="size-4 text-accent" aria-hidden /> Devis
+          </Link>
+          {/* Accès du personnel SOGER à la gestion (connexion administrateur). */}
+          <Link
+            href="/admin/connexion"
+            prefetch={false}
+            title="Espace gestion (personnel SOGER)"
+            aria-label="Espace gestion (personnel SOGER)"
+            className="hidden h-10 shrink-0 items-center gap-2 rounded-lg border border-line px-2.5 text-sm font-medium whitespace-nowrap text-ink transition hover:border-ink hover:bg-mist lg:flex"
+          >
+            <LayoutDashboard className="size-4 text-accent" aria-hidden />
           </Link>
           <Link href="/compte" aria-label="Mon compte" className="grid size-10 place-items-center rounded-lg text-ink transition hover:bg-mist">
             <User className="size-5" strokeWidth={1.8} />
@@ -197,9 +207,12 @@ export function Header({ categories }: { categories: NavCategory[] }) {
                   ))}
                 </div>
               </div>
-              <div className="border-t border-line p-4">
+              <div className="space-y-2 border-t border-line p-4">
                 <Link href="/devis" className="flex h-12 items-center justify-center gap-2 rounded-lg bg-accent font-medium text-white">
                   <FileText className="size-4" /> Demander un devis
+                </Link>
+                <Link href="/admin/connexion" prefetch={false} className="flex h-11 items-center justify-center gap-2 rounded-lg border border-line text-sm font-medium text-ink">
+                  <LayoutDashboard className="size-4 text-accent" /> Espace gestion (personnel)
                 </Link>
               </div>
             </motion.aside>

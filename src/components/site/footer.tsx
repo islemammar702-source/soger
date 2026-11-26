@@ -49,7 +49,10 @@ export function Footer({ industrial, agricultural }: { industrial: FooterCategor
       <div className="border-t border-white/10">
         <div className="container-soger flex flex-col gap-2 py-6 text-xs text-white/45 sm:flex-row sm:items-center sm:justify-between">
           <p>© <CurrentYear /> {site.legalName}. Tous droits réservés.</p>
-          <p>Les marques citées appartiennent à leurs propriétaires respectifs.</p>
+          <p className="flex flex-wrap items-center gap-x-4 gap-y-1">
+            <span>Les marques citées appartiennent à leurs propriétaires respectifs.</span>
+            <Link href="/admin/connexion" prefetch={false} className="text-white/60 underline-offset-4 transition-colors hover:text-white hover:underline">Espace gestion</Link>
+          </p>
         </div>
       </div>
     </footer>

@@ -35,6 +35,11 @@ export function LoginForm({ area, next }: { area: "customer" | "staff"; next?: s
         </p>
       )}
       <p className="text-center text-xs text-steel">Mot de passe oublié ? Contactez SOGER pour le réinitialiser.</p>
+      {area === "customer" && (
+        <p className="border-t border-line pt-4 text-center text-sm text-steel">
+          Personnel SOGER ? <Link href="/admin/connexion" prefetch={false} className="font-semibold text-ink underline-offset-4 hover:underline">Accéder à l&apos;espace gestion</Link>
+        </p>
+      )}
     </form>
   );
 }
