@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { Camera, FileUp, Loader2, RefreshCw, ScanLine, Sparkles, Trash2, Video, X } from "lucide-react";
 import { deleteInvoiceFileAction, extractInvoiceAction, uploadInvoiceFileAction, type InvoiceDraft } from "@/server/admin/supplier-invoices";
 import { cn } from "@/lib/utils";
+import { PdfPreview } from "./pdf-preview";
 import { SupplierInvoiceForm } from "./supplier-invoice-form";
 
 type Perms = { canPay: boolean; canStock: boolean; canCreateProduct: boolean; canCreateSupplier: boolean };
@@ -97,7 +98,7 @@ export function InvoiceImport({ perms, aiEnabled, empty }: { perms: Perms; aiEna
               </span>
             </div>
             {stage.mimeType === "application/pdf" ? (
-              <iframe src={`/media/${stage.fileId}#view=FitH`} title="Aperçu de la facture" className="h-[78vh] w-full bg-mist" />
+              <PdfPreview url={`/media/${stage.fileId}`} className="h-[78vh] w-full" />
             ) : (
               // eslint-disable-next-line @next/next/no-img-element
               <img src={`/media/${stage.fileId}`} alt="Facture importée" className="max-h-[78vh] w-full object-contain bg-mist" />
