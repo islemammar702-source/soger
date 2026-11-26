@@ -1,7 +1,7 @@
 "use client";
 
 import { AnimatePresence, motion } from "motion/react";
-import Link from "next/link";
+import { Link, useI18n } from "@/i18n/client";
 import { CheckCircle2, X } from "lucide-react";
 import { useSyncExternalStore } from "react";
 
@@ -33,8 +33,9 @@ const EMPTY: Toast[] = [];
 
 export function Toaster() {
   const items = useSyncExternalStore(subscribe, () => toasts, () => EMPTY);
+  const tr = useI18n().t;
   return (
-    <div aria-live="polite" className="pointer-events-none fixed inset-x-0 bottom-4 z-[60] flex flex-col items-center gap-2 px-4 sm:inset-x-auto sm:right-4 sm:items-end">
+    <div aria-live="polite" className="pointer-events-none fixed inset-x-0 bottom-4 z-[60] flex flex-col items-center gap-2 px-4 sm:inset-x-auto sm:end-4 sm:items-end">
       <AnimatePresence initial={false}>
         {items.map((t) => (
           <motion.div
@@ -51,11 +52,11 @@ export function Toaster() {
               {t.description && <p className="mt-0.5 truncate text-sm text-steel">{t.description}</p>}
               {t.action && (
                 <Link href={t.action.href} onClick={() => dismiss(t.id)} className="mt-2 inline-block text-sm font-semibold text-accent hover:text-accent-hover">
-                  {t.action.label} →
+                  {t.action.label} <span className="inline-block rtl:rotate-180">→</span>
                 </Link>
               )}
             </div>
-            <button type="button" onClick={() => dismiss(t.id)} aria-label="Fermer" className="text-steel hover:text-ink">
+            <button type="button" onClick={() => dismiss(t.id)} aria-label={tr.toast.close} className="text-steel hover:text-ink">
               <X className="size-4" />
             </button>
           </motion.div>

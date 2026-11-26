@@ -13,8 +13,8 @@
   --color-danger: #dc2626;
   --color-warning: #d97706;
 
-  --font-sans: "Inter Variable", ui-sans-serif, system-ui, sans-serif;
-  --font-display: "Space Grotesk Variable", "Inter Variable", ui-sans-serif, sans-serif;
+  --font-sans: "Inter Variable", "Noto Sans Arabic Variable", ui-sans-serif, system-ui, sans-serif;
+  --font-display: "Space Grotesk Variable", "Inter Variable", "Noto Sans Arabic Variable", ui-sans-serif, sans-serif;
 
   --radius-card: 0.875rem;
   --shadow-soft: 0 1px 2px rgb(17 24 39 / 0.04), 0 8px 24px -12px rgb(17 24 39 / 0.12);
@@ -78,4 +78,10 @@
   -webkit-background-clip: text;
   background-clip: text;
   color: transparent;
+}
+
+/* Arabe : l'espacement des lettres casse la liaison des caractères. */
+:lang(ar),
+:lang(ar) * {
+  letter-spacing: normal !important;
 }

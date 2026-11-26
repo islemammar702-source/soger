@@ -8,6 +8,7 @@ import { ChevronLeft, ChevronRight, Expand, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { isOptimizable } from "@/lib/utils";
 import { CategoryIcon } from "./category-icon";
+import { useI18n } from "@/i18n/client";
 
 type Img = { url: string; alt: string | null };
 const noop = () => () => {};
@@ -17,6 +18,8 @@ const noop = () => () => {};
  * plein écran au clic avec navigation clavier / balayage.
  */
 export function ProductGallery({ images, name, icon }: { images: Img[]; name: string; icon?: string | null }) {
+  const { t, fmt, dir } = useI18n();
+  const rtl = dir === "rtl";
   const [index, setIndex] = useState(0);
   const [zoom, setZoom] = useState<{ x: number; y: number } | null>(null);
   const [lightbox, setLightbox] = useState(false);
@@ -28,8 +31,10 @@ export function ProductGallery({ images, name, icon }: { images: Img[]; name: st
     if (!lightbox) return;
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") setLightbox(false);
-      if (e.key === "ArrowRight") setIndex((i) => (i + 1) % images.length);
-      if (e.key === "ArrowLeft") setIndex((i) => (i - 1 + images.length) % images.length);
+      // En arabe, la flèche gauche avance (sens de lecture).
+      const step = rtl ? -1 : 1;
+      if (e.key === "ArrowRight") setIndex((i) => (i + step + images.length) % images.length);
+      if (e.key === "ArrowLeft") setIndex((i) => (i - step + images.length) % images.length);
     };
     document.body.style.overflow = "hidden";
     window.addEventListener("keydown", onKey);
@@ -37,14 +42,14 @@ export function ProductGallery({ images, name, icon }: { images: Img[]; name: st
       document.body.style.overflow = "";
       window.removeEventListener("keydown", onKey);
     };
-  }, [lightbox, images.length]);
+  }, [lightbox, images.length, rtl]);
 
   if (!current) {
     return (
       <div className="grid aspect-square place-items-center rounded-[var(--radius-card)] border border-line bg-gradient-to-br from-mist to-white">
         <div className="flex flex-col items-center gap-3 text-steel/50">
           <CategoryIcon name={icon} className="size-28" />
-          <span className="text-xs">Photo bientôt disponible</span>
+          <span className="text-xs">{t.product.photoSoon}</span>
         </div>
       </div>
     );
@@ -60,7 +65,7 @@ export function ProductGallery({ images, name, icon }: { images: Img[]; name: st
           setZoom({ x: ((e.clientX - r.left) / r.width) * 100, y: ((e.clientY - r.top) / r.height) * 100 });
         }}
         onMouseLeave={() => setZoom(null)}
-        aria-label="Agrandir l'image"
+        aria-label={t.product.enlarge}
         className="group relative block aspect-square w-full cursor-zoom-in overflow-hidden rounded-[var(--radius-card)] border border-line bg-gradient-to-br from-mist to-white"
       >
         <Image
@@ -73,7 +78,7 @@ export function ProductGallery({ images, name, icon }: { images: Img[]; name: st
           className="object-contain p-8 transition-transform duration-200 ease-out"
           style={zoom ? { transform: "scale(2)", transformOrigin: `${zoom.x}% ${zoom.y}%` } : undefined}
         />
-        <span className="absolute right-3 bottom-3 grid size-9 place-items-center rounded-lg bg-white/90 text-graphite shadow-soft opacity-0 transition group-hover:opacity-100">
+        <span className="absolute end-3 bottom-3 grid size-9 place-items-center rounded-lg bg-white/90 text-graphite shadow-soft opacity-0 transition group-hover:opacity-100">
           <Expand className="size-4" />
         </span>
       </button>
@@ -85,7 +90,7 @@ export function ProductGallery({ images, name, icon }: { images: Img[]; name: st
               key={img.url}
               type="button"
               onClick={() => setIndex(i)}
-              aria-label={`Image ${i + 1}`}
+              aria-label={fmt(t.product.image, { n: i + 1 })}
               aria-current={i === index}
               className={cn(
                 "relative size-20 shrink-0 overflow-hidden rounded-lg border bg-mist transition",
@@ -106,6 +111,7 @@ export function ProductGallery({ images, name, icon }: { images: Img[]; name: st
                 role="dialog"
                 aria-modal="true"
                 aria-label={name}
+                dir={dir}
                 className="fixed inset-0 z-[70] flex flex-col bg-ink/95 backdrop-blur"
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
@@ -113,7 +119,7 @@ export function ProductGallery({ images, name, icon }: { images: Img[]; name: st
               >
                 <div className="flex items-center justify-between p-4 text-white">
                   <p className="truncate text-sm text-white/70">{name} — {index + 1} / {images.length}</p>
-                  <button type="button" onClick={() => setLightbox(false)} aria-label="Fermer" className="grid size-10 place-items-center rounded-lg hover:bg-white/10">
+                  <button type="button" onClick={() => setLightbox(false)} aria-label={t.common.close} className="grid size-10 place-items-center rounded-lg hover:bg-white/10">
                     <X className="size-5" />
                   </button>
                 </div>
@@ -122,19 +128,19 @@ export function ProductGallery({ images, name, icon }: { images: Img[]; name: st
                   drag={images.length > 1 ? "x" : false}
                   dragConstraints={{ left: 0, right: 0 }}
                   onDragEnd={(_, info) => {
-                    if (info.offset.x < -80) go(1);
-                    if (info.offset.x > 80) go(-1);
+                    if (info.offset.x < -80) go(rtl ? -1 : 1);
+                    if (info.offset.x > 80) go(rtl ? 1 : -1);
                   }}
                 >
                   <Image unoptimized={!isOptimizable(current.url)} src={current.url} alt={current.alt ?? name} fill sizes="100vw" className="object-contain p-4 sm:p-10" />
                 </motion.div>
                 {images.length > 1 && (
                   <>
-                    <button type="button" onClick={() => go(-1)} aria-label="Image précédente" className="absolute top-1/2 left-3 grid size-12 -translate-y-1/2 place-items-center rounded-full bg-white/10 text-white hover:bg-white/20">
-                      <ChevronLeft className="size-6" />
+                    <button type="button" onClick={() => go(-1)} aria-label={t.product.prevImage} className="absolute start-3 top-1/2 grid size-12 -translate-y-1/2 place-items-center rounded-full bg-white/10 text-white hover:bg-white/20">
+                      <ChevronLeft className="size-6 rtl:rotate-180" />
                     </button>
-                    <button type="button" onClick={() => go(1)} aria-label="Image suivante" className="absolute top-1/2 right-3 grid size-12 -translate-y-1/2 place-items-center rounded-full bg-white/10 text-white hover:bg-white/20">
-                      <ChevronRight className="size-6" />
+                    <button type="button" onClick={() => go(1)} aria-label={t.product.nextImage} className="absolute end-3 top-1/2 grid size-12 -translate-y-1/2 place-items-center rounded-full bg-white/10 text-white hover:bg-white/20">
+                      <ChevronRight className="size-6 rtl:rotate-180" />
                     </button>
                   </>
                 )}

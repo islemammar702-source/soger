@@ -1,10 +1,10 @@
 "use client";
 
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useId, useRef, useState } from "react";
 import { Clock, FolderTree, Loader2, Search, Tag, X } from "lucide-react";
-import { cn, formatTND } from "@/lib/utils";
+import { cn } from "@/lib/utils";
+import { Link, useI18n } from "@/i18n/client";
 
 type Suggestions = {
   products: { slug: string; sku: string; name: string; manufacturerRef: string | null; brandName: string | null; priceTTC: number | null }[];
@@ -41,6 +41,7 @@ function clearHistory() {
 
 /** Recherche avec suggestions instantanées, navigation clavier et historique local. */
 export function SearchBox({ className, autoFocus }: { className?: string; autoFocus?: boolean }) {
+  const { t, fmt, money, href: loc, category } = useI18n();
   const router = useRouter();
   const listId = useId();
   const inputRef = useRef<HTMLInputElement>(null);
@@ -85,9 +86,9 @@ export function SearchBox({ className, autoFocus }: { className?: string; autoFo
             href: `/produits/${p.slug}`,
             price: p.priceTTC,
           })),
-          ...(data?.categories ?? []).map((c) => ({ kind: "category" as const, label: c.name, href: `/categories/${c.slug}` })),
+          ...(data?.categories ?? []).map((c) => ({ kind: "category" as const, label: category(c.slug, c.name), href: `/categories/${c.slug}` })),
           ...(data?.brands ?? []).map((b) => ({ kind: "brand" as const, label: b.name, href: `/produits?marque=${b.slug}` })),
-          { kind: "all" as const, label: `Tous les résultats pour « ${term} »`, query: term, href: `/produits?q=${encodeURIComponent(term)}` },
+          { kind: "all" as const, label: fmt(t.search.allResults, { q: term }), query: term, href: `/produits?q=${encodeURIComponent(term)}` },
         ];
 
   const go = (opt: Option) => {
@@ -96,7 +97,7 @@ export function SearchBox({ className, autoFocus }: { className?: string; autoFo
     setOpen(false);
     setActive(-1);
     inputRef.current?.blur();
-    router.push(opt.href);
+    router.push(loc(opt.href));
   };
 
   const submit = () => {
@@ -111,13 +112,13 @@ export function SearchBox({ className, autoFocus }: { className?: string; autoFo
     <div className={cn("relative", className)}>
       <form
         role="search"
-        action="/produits"
+        action={loc("/produits")}
         onSubmit={(e) => {
           e.preventDefault();
           submit();
         }}
       >
-        <Search className="pointer-events-none absolute top-1/2 left-3.5 size-4 -translate-y-1/2 text-steel" aria-hidden />
+        <Search className="pointer-events-none absolute start-3.5 top-1/2 size-4 -translate-y-1/2 text-steel" aria-hidden />
         <input
           ref={inputRef}
           name="q"
@@ -126,8 +127,8 @@ export function SearchBox({ className, autoFocus }: { className?: string; autoFo
           autoComplete="off"
           spellCheck={false}
           value={q}
-          placeholder="Référence, produit, marque…"
-          aria-label="Rechercher un produit"
+          placeholder={t.search.placeholder}
+          aria-label={t.search.aria}
           role="combobox"
           aria-expanded={showPanel}
           aria-controls={listId}
@@ -157,13 +158,13 @@ export function SearchBox({ className, autoFocus }: { className?: string; autoFo
               setActive(-1);
             }
           }}
-          className="h-11 w-full rounded-lg border border-line bg-mist/70 pr-10 pl-10 text-sm text-ink transition outline-none placeholder:text-steel/80 focus:border-accent focus:bg-white focus:ring-4 focus:ring-accent/10 [&::-webkit-search-cancel-button]:hidden"
+          className="h-11 w-full rounded-lg border border-line bg-mist/70 ps-10 pe-10 text-sm text-ink transition outline-none placeholder:text-steel/80 focus:border-accent focus:bg-white focus:ring-4 focus:ring-accent/10 [&::-webkit-search-cancel-button]:hidden"
         />
         {loading ? (
-          <Loader2 className="absolute top-1/2 right-3.5 size-4 -translate-y-1/2 animate-spin text-steel" aria-hidden />
+          <Loader2 className="absolute end-3.5 top-1/2 size-4 -translate-y-1/2 animate-spin text-steel" aria-hidden />
         ) : (
           q && (
-            <button type="button" aria-label="Effacer" onClick={() => { setQ(""); setData(null); inputRef.current?.focus(); }} className="absolute top-1/2 right-2.5 grid size-7 -translate-y-1/2 place-items-center rounded-md text-steel hover:bg-mist hover:text-ink">
+            <button type="button" aria-label={t.search.clear} onClick={() => { setQ(""); setData(null); inputRef.current?.focus(); }} className="absolute end-2.5 top-1/2 grid size-7 -translate-y-1/2 place-items-center rounded-md text-steel hover:bg-mist hover:text-ink">
               <X className="size-4" />
             </button>
           )
@@ -171,21 +172,21 @@ export function SearchBox({ className, autoFocus }: { className?: string; autoFo
       </form>
 
       {showPanel && (
-        <div className="absolute inset-x-0 top-[calc(100%+6px)] z-50 overflow-hidden rounded-xl border border-line bg-white shadow-lift md:left-auto md:w-[440px]">
+        <div className="absolute inset-x-0 top-[calc(100%+6px)] z-50 overflow-hidden rounded-xl border border-line bg-white shadow-lift md:start-auto md:w-[440px]">
           {term.length < 2 && history.length > 0 && (
             <div className="flex items-center justify-between px-4 pt-3 pb-1">
-              <p className="text-xs font-semibold tracking-wider text-steel uppercase">Recherches récentes</p>
+              <p className="text-xs font-semibold tracking-wider text-steel uppercase">{t.search.recent}</p>
               <button
                 type="button"
                 onMouseDown={(e) => e.preventDefault()}
                 onClick={() => { clearHistory(); setHistory([]); }}
                 className="text-xs font-medium text-steel hover:text-ink"
               >
-                Effacer
+                {t.search.clear}
               </button>
             </div>
           )}
-          <ul id={listId} role="listbox" aria-label="Suggestions" className="max-h-[60vh] overflow-y-auto py-1.5">
+          <ul id={listId} role="listbox" aria-label={t.search.suggestions} className="max-h-[60vh] overflow-y-auto py-1.5">
             {options.map((o, i) => {
               const Icon = o.kind === "history" ? Clock : o.kind === "category" ? FolderTree : o.kind === "brand" ? Tag : Search;
               return (
@@ -209,9 +210,9 @@ export function SearchBox({ className, autoFocus }: { className?: string; autoFo
                       <span className="block truncate text-ink">{o.label}</span>
                       {o.meta && <span className="block truncate font-mono text-xs text-steel">{o.meta}</span>}
                     </span>
-                    {typeof o.price === "number" && <span className="shrink-0 text-xs font-semibold text-graphite">{formatTND(o.price)}</span>}
-                    {o.kind === "category" && <span className="shrink-0 text-xs text-steel">Catégorie</span>}
-                    {o.kind === "brand" && <span className="shrink-0 text-xs text-steel">Marque</span>}
+                    {typeof o.price === "number" && <span className="shrink-0 text-xs font-semibold text-graphite">{money(o.price)}</span>}
+                    {o.kind === "category" && <span className="shrink-0 text-xs text-steel">{t.search.category}</span>}
+                    {o.kind === "brand" && <span className="shrink-0 text-xs text-steel">{t.search.brand}</span>}
                   </Link>
                 </li>
               );

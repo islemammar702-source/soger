@@ -1,14 +1,15 @@
-import Link from "next/link";
+import { Link } from "@/i18n/client";
+import { getI18n } from "@/i18n/server";
 import { ArrowRight } from "lucide-react";
 import type { ReactNode } from "react";
 import { cn } from "@/lib/utils";
 
-export function SectionHeading({
+export async function SectionHeading({
   eyebrow,
   title,
   description,
   href,
-  hrefLabel = "Tout voir",
+  hrefLabel,
   tone = "dark",
   className,
 }: {
@@ -20,6 +21,7 @@ export function SectionHeading({
   tone?: "dark" | "light";
   className?: string;
 }) {
+  const { t } = await getI18n();
   return (
     <div className={cn("flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between", className)}>
       <div className="max-w-2xl">
@@ -42,8 +44,8 @@ export function SectionHeading({
             tone === "dark" ? "text-ink hover:text-accent" : "text-white hover:text-accent",
           )}
         >
-          {hrefLabel}
-          <ArrowRight className="size-4 transition-transform group-hover:translate-x-0.5" />
+          {hrefLabel ?? t.common.seeAll}
+          <ArrowRight className="size-4 transition-transform group-hover:translate-x-0.5 rtl:rotate-180 rtl:group-hover:-translate-x-0.5" />
         </Link>
       )}
     </div>

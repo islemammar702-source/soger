@@ -1,3 +1,4 @@
+/* eslint-disable @next/next/no-html-link-for-pages -- liens de téléchargement (fichiers Excel/CSV), pas des pages. */
 import { Download } from "lucide-react";
 import { ImportWizard } from "@/components/admin/import-wizard";
 import { Card, PageHeader, btn } from "@/components/admin/ui";

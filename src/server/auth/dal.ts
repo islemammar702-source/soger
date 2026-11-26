@@ -60,9 +60,13 @@ export const getCurrentCustomer = cache(async () => {
   return customer ? { user, customer } : null;
 });
 
+/** Espace client : sans session, renvoie vers la connexion dans la langue de la page (« /ar/compte/… »). */
 export async function requireCustomer(next = "/compte") {
   const c = await getCurrentCustomer();
-  if (!c) redirect(`/compte/connexion?suite=${encodeURIComponent(next)}`);
+  if (!c) {
+    const lang = /^\/(fr|en|ar)(\/|$)/.exec(next)?.[1];
+    redirect(`${lang ? `/${lang}` : ""}/compte/connexion?suite=${encodeURIComponent(next)}`);
+  }
   return c;
 }
 

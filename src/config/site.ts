@@ -18,22 +18,14 @@ export const site = {
     city: "Tunisie" as string, // TODO : ville
     mapsUrl: "" as string, // TODO : lien Google Maps du magasin
     hours: [
-      { days: "Lundi – Vendredi", time: "08:00 – 18:00" }, // TODO : vérifier
-      { days: "Samedi", time: "08:00 – 13:00" }, // TODO : vérifier
+      // « days » : clé traduite (Lundi – Vendredi / Samedi) dans src/i18n/dictionaries.
+      { days: "weekdays", time: "08:00 – 18:00" }, // TODO : vérifier
+      { days: "saturday", time: "08:00 – 13:00" }, // TODO : vérifier
     ],
   },
   /** Les prix de vente sont stockés HT ; affichage TTC pour le public. */
   pricesIncludeVat: true,
 } as const;
-
-export const mainNav = [
-  { href: "/", label: "Accueil" },
-  { href: "/industrie", label: "Industrie" },
-  { href: "/agriculture", label: "Agriculture" },
-  { href: "/marques", label: "Marques" },
-  { href: "/a-propos", label: "À propos" },
-  { href: "/contact", label: "Contact" },
-] as const;
 
 export function whatsappLink(message: string) {
   const n = site.contact.whatsapp;

@@ -5,7 +5,8 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useState, useSyncExternalStore, useTransition, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { Check, LayoutGrid, List, Loader2, SlidersHorizontal, X } from "lucide-react";
-import { SORT_KEYS, SORT_LABELS } from "@/lib/catalog-sorts";
+import { SORT_KEYS } from "@/lib/catalog-sorts";
+import { useI18n } from "@/i18n/client";
 import { cn } from "@/lib/utils";
 
 const noop = () => () => {};
@@ -35,6 +36,7 @@ function useUpdateParams() {
 /* ─── Barre d'outils : nombre de résultats, tri, vue ──────────────────── */
 
 export function CatalogToolbar({ total, hasQuery, activeCount, facets }: { total: number; hasQuery: boolean; activeCount: number; facets: Facets }) {
+  const { t, plural } = useI18n();
   const { params, update, pending } = useUpdateParams();
   const sort = params.get("tri") ?? (hasQuery ? "pertinence" : "nom");
   const view = params.get("vue") === "liste" ? "liste" : "grille";
@@ -47,30 +49,30 @@ export function CatalogToolbar({ total, hasQuery, activeCount, facets }: { total
         onClick={() => setOpen(true)}
         className="inline-flex h-10 items-center gap-2 rounded-lg border border-line bg-white px-3.5 text-sm font-medium lg:hidden"
       >
-        <SlidersHorizontal className="size-4" /> Filtres
+        <SlidersHorizontal className="size-4" /> {t.catalog.filters}
         {activeCount > 0 && <span className="grid size-5 place-items-center rounded-full bg-accent text-[11px] text-white">{activeCount}</span>}
       </button>
 
-      <p className="mr-auto flex items-center gap-2 text-sm text-steel" aria-live="polite">
+      <p className="me-auto flex items-center gap-2 text-sm text-steel" aria-live="polite">
         {pending && <Loader2 className="size-4 animate-spin text-accent" />}
-        <span><span className="font-semibold text-ink">{total}</span> produit{total > 1 ? "s" : ""}</span>
+        <span>{plural(t.common.productCount, total)}</span>
       </p>
 
       <label className="flex items-center gap-2 text-sm text-steel">
-        <span className="hidden sm:inline">Trier par</span>
+        <span className="hidden sm:inline">{t.catalog.sortBy}</span>
         <select
           value={sort}
           onChange={(e) => update((p) => p.set("tri", e.target.value))}
           className="h-10 rounded-lg border border-line bg-white px-3 text-sm font-medium text-ink outline-none focus:border-accent"
         >
           {SORT_KEYS.filter((k) => k !== "pertinence" || hasQuery).map((k) => (
-            <option key={k} value={k}>{SORT_LABELS[k]}</option>
+            <option key={k} value={k}>{t.catalog.sorts[k]}</option>
           ))}
         </select>
       </label>
 
-      <div className="flex rounded-lg border border-line bg-white p-0.5" role="group" aria-label="Affichage">
-        {([["grille", LayoutGrid, "Grille"], ["liste", List, "Liste"]] as const).map(([v, Icon, label]) => (
+      <div className="flex rounded-lg border border-line bg-white p-0.5" role="group" aria-label={t.catalog.display}>
+        {([["grille", LayoutGrid, t.catalog.grid], ["liste", List, t.catalog.list]] as const).map(([v, Icon, label]) => (
           <button
             key={v}
             type="button"
@@ -92,6 +94,8 @@ export function CatalogToolbar({ total, hasQuery, activeCount, facets }: { total
 }
 
 function MobileFilters({ open, onClose, total, children }: { open: boolean; onClose: () => void; total: number; children: ReactNode }) {
+  const { t, plural, dir } = useI18n();
+  const rtl = dir === "rtl";
   const mounted = useSyncExternalStore(noop, () => true, () => false);
   useEffect(() => {
     document.body.style.overflow = open ? "hidden" : "";
@@ -103,32 +107,32 @@ function MobileFilters({ open, onClose, total, children }: { open: boolean; onCl
   return createPortal(
     <AnimatePresence>
       {open && (
-        <>
+        <div dir={dir}>
           <motion.div className="fixed inset-0 z-50 bg-ink/50 backdrop-blur-sm lg:hidden" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={onClose} />
           <motion.aside
             role="dialog"
             aria-modal="true"
-            aria-label="Filtres"
-            className="fixed inset-y-0 left-0 z-50 flex h-dvh w-[min(90vw,380px)] flex-col bg-white shadow-2xl lg:hidden"
-            initial={{ x: "-100%" }}
+            aria-label={t.catalog.filters}
+            className="fixed inset-y-0 start-0 z-50 flex h-dvh w-[min(90vw,380px)] flex-col bg-white shadow-2xl lg:hidden"
+            initial={{ x: rtl ? "100%" : "-100%" }}
             animate={{ x: 0 }}
-            exit={{ x: "-100%" }}
+            exit={{ x: rtl ? "100%" : "-100%" }}
             transition={{ type: "spring", damping: 32, stiffness: 320 }}
           >
             <div className="flex h-16 items-center justify-between border-b border-line px-4">
-              <p className="font-display text-lg font-semibold">Filtres</p>
-              <button type="button" onClick={onClose} aria-label="Fermer" className="grid size-10 place-items-center rounded-lg hover:bg-mist">
+              <p className="font-display text-lg font-semibold">{t.catalog.filters}</p>
+              <button type="button" onClick={onClose} aria-label={t.common.close} className="grid size-10 place-items-center rounded-lg hover:bg-mist">
                 <X className="size-5" />
               </button>
             </div>
             <div className="flex-1 overflow-y-auto p-4">{children}</div>
             <div className="border-t border-line p-4">
               <button type="button" onClick={onClose} className="h-12 w-full rounded-lg bg-accent font-medium text-white hover:bg-accent-hover">
-                Voir {total} produit{total > 1 ? "s" : ""}
+                {plural(t.catalog.show, total)}
               </button>
             </div>
           </motion.aside>
-        </>
+        </div>
       )}
     </AnimatePresence>,
     document.body,
@@ -138,6 +142,7 @@ function MobileFilters({ open, onClose, total, children }: { open: boolean; onCl
 /* ─── Panneau de filtres ─────────────────────────────────────────────── */
 
 export function FilterPanel({ facets }: { facets: Facets }) {
+  const { t, fmt, unit } = useI18n();
   const { params, update } = useUpdateParams();
   const selectedBrands = new Set((params.get("marque") ?? "").split(",").filter(Boolean));
   const inStock = params.get("stock") === "1";
@@ -160,19 +165,19 @@ export function FilterPanel({ facets }: { facets: Facets }) {
           onClick={() => update((p) => [...p.keys()].filter((k) => k === "marque" || k === "prix" || k === "stock" || k.startsWith("f_")).forEach((k) => p.delete(k)))}
           className="inline-flex items-center gap-1.5 text-sm font-medium text-accent hover:text-accent-hover"
         >
-          <X className="size-4" /> Effacer les filtres
+          <X className="size-4" /> {t.catalog.clearFilters}
         </button>
       )}
 
-      <FilterGroup title="Disponibilité">
+      <FilterGroup title={t.catalog.availability}>
         <label className="flex cursor-pointer items-center gap-3 text-sm text-graphite">
           <Checkbox checked={inStock} onChange={() => update((p) => (inStock ? p.delete("stock") : p.set("stock", "1")))} />
-          En stock uniquement
+          {t.catalog.inStockOnly}
         </label>
       </FilterGroup>
 
       {facets.brands.length > 0 && (
-        <FilterGroup title="Marque">
+        <FilterGroup title={t.catalog.brand}>
           <ul className="space-y-2">
             {facets.brands.map((b) => (
               <li key={b.slug}>
@@ -188,7 +193,7 @@ export function FilterPanel({ facets }: { facets: Facets }) {
       )}
 
       {facets.price && (
-        <FilterGroup title="Prix TTC (DT)">
+        <FilterGroup title={fmt(t.catalog.price, { cur: t.common.currency })}>
           <RangeInputs
             paramKey="prix"
             min={facets.price.min}
@@ -200,7 +205,7 @@ export function FilterPanel({ facets }: { facets: Facets }) {
       )}
 
       {facets.attributes.map((a) => (
-        <FilterGroup key={a.key} title={`${a.label}${a.unit ? ` en ${a.unit}` : ""}`}>
+        <FilterGroup key={a.key} title={a.unit ? fmt(t.catalog.inUnit, { label: a.label, unit: unit(a.unit) }) : a.label}>
           <RangeInputs
             paramKey={`f_${a.key}`}
             min={a.min}
@@ -235,6 +240,7 @@ function Checkbox({ checked, onChange }: { checked: boolean; onChange: () => voi
 
 /** Deux champs min / max, appliqués à la validation (Entrée ou bouton). */
 function RangeInputs({ paramKey, min, max, value, onApply }: { paramKey: string; min: number; max: number; value: string | null; onApply: (v: string | null) => void }) {
+  const { t } = useI18n();
   const [a, b] = (value ?? "").split("-");
   const [lo, setLo] = useState(a ?? "");
   const [hi, setHi] = useState(b ?? "");
@@ -259,10 +265,10 @@ function RangeInputs({ paramKey, min, max, value, onApply }: { paramKey: string;
         apply();
       }}
     >
-      <input aria-label="Minimum" name={`${paramKey}-min`} inputMode="decimal" placeholder={fmt(min)} value={lo} onChange={(e) => setLo(e.target.value)} className={field} />
+      <input aria-label={t.catalog.min} name={`${paramKey}-min`} inputMode="decimal" placeholder={fmt(min)} value={lo} onChange={(e) => setLo(e.target.value)} className={field} />
       <span className="text-steel">–</span>
-      <input aria-label="Maximum" name={`${paramKey}-max`} inputMode="decimal" placeholder={fmt(max)} value={hi} onChange={(e) => setHi(e.target.value)} className={field} />
-      <button type="submit" aria-label="Appliquer" className="grid size-10 shrink-0 place-items-center rounded-lg bg-ink text-white hover:bg-graphite">
+      <input aria-label={t.catalog.max} name={`${paramKey}-max`} inputMode="decimal" placeholder={fmt(max)} value={hi} onChange={(e) => setHi(e.target.value)} className={field} />
+      <button type="submit" aria-label={t.catalog.apply} className="grid size-10 shrink-0 place-items-center rounded-lg bg-ink text-white hover:bg-graphite">
         <Check className="size-4" />
       </button>
     </form>

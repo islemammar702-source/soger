@@ -1,17 +1,21 @@
-import Link from "next/link";
 import { ArrowRight } from "lucide-react";
+import { Link } from "@/i18n/client";
+import { getI18n } from "@/i18n/server";
 import { getCategories, getProductsBySector, type Sector } from "@/server/catalog";
 import { CategoryIcon } from "./category-icon";
 import { PageHero } from "./page-hero";
 import { ProductCard } from "./product-card";
 import { SectionHeading } from "./section";
 
-export async function SectorPage({ sector, title, description }: { sector: Sector; title: string; description: string }) {
+export async function SectorPage({ sector }: { sector: Sector }) {
+  const { t, plural, category, categoryDescription } = await getI18n();
   const [categories, products] = await Promise.all([getCategories(sector), getProductsBySector(sector, 8)]);
   const iconOf = new Map(categories.map((c) => [c.slug, c.icon]));
+  const industrial = sector === "industrial";
+  const title = industrial ? t.sector.industryTitle : t.sector.agriTitle;
   return (
     <>
-      <PageHero title={title} description={description} crumbs={[{ href: sector === "industrial" ? "/industrie" : "/agriculture", label: title }]} />
+      <PageHero title={title} description={industrial ? t.sector.industryText : t.sector.agriText} crumbs={[{ href: industrial ? "/industrie" : "/agriculture", label: title }]} />
       <section className="container-soger py-12 lg:py-16">
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {categories.map((c) => (
@@ -21,11 +25,11 @@ export async function SectorPage({ sector, title, description }: { sector: Secto
               </span>
               <span className="min-w-0 flex-1">
                 <span className="flex items-center justify-between gap-2 font-semibold">
-                  {c.name}
-                  <ArrowRight className="size-4 shrink-0 text-steel transition group-hover:translate-x-0.5 group-hover:text-accent" />
+                  {category(c.slug, c.name)}
+                  <ArrowRight className="size-4 shrink-0 text-steel transition group-hover:translate-x-0.5 group-hover:text-accent rtl:rotate-180 rtl:group-hover:-translate-x-0.5" />
                 </span>
-                <span className="mt-1 line-clamp-2 block text-sm text-steel">{c.description}</span>
-                <span className="mt-2 block text-xs font-medium text-steel/80">{c.productCount} produit{c.productCount > 1 ? "s" : ""}</span>
+                <span className="mt-1 line-clamp-2 block text-sm text-steel">{categoryDescription(c.slug, c.description)}</span>
+                <span className="mt-2 block text-xs font-medium text-steel/80">{plural(t.common.productCount, c.productCount)}</span>
               </span>
             </Link>
           ))}
@@ -34,7 +38,7 @@ export async function SectorPage({ sector, title, description }: { sector: Secto
       {products.length > 0 && (
         <section className="border-t border-line bg-mist/60 py-12 lg:py-16">
           <div className="container-soger">
-            <SectionHeading title="Sélection de produits" href="/produits" />
+            <SectionHeading title={t.sector.selection} href="/produits" />
             <div className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
               {products.map((p) => <ProductCard key={p.id} product={p} icon={iconOf.get(p.categorySlug ?? "")} />)}
             </div>

@@ -1,4 +1,6 @@
-import Link from "next/link";
+"use client";
+
+import { Link, useI18n } from "@/i18n/client";
 import { cn, round2 } from "@/lib/utils";
 
 /** Emblème SOGER : bague de roulement stylisée, 8 billes. */
@@ -19,10 +21,11 @@ export function LogoMark({ className }: { className?: string }) {
 }
 
 export function Logo({ tone = "dark", className }: { tone?: "dark" | "light"; className?: string }) {
+  const { t } = useI18n();
   return (
     <Link
       href="/"
-      aria-label="SOGER – accueil"
+      aria-label={t.logo.homeAria}
       className={cn(
         "flex items-center gap-2.5",
         tone === "dark" ? "text-ink" : "text-white",
@@ -38,7 +41,7 @@ export function Logo({ tone = "dark", className }: { tone?: "dark" | "light"; cl
             tone === "dark" ? "text-steel" : "text-white/55",
           )}
         >
-          Société Générale de Roulement
+          {t.logo.tagline}
         </span>
       </span>
     </Link>

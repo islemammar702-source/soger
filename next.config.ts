@@ -10,6 +10,8 @@ const nextConfig: NextConfig = {
   },
   partialPrefetching: true,
   experimental: {
+    // 404 commune : le site public (/[lang]), la gestion et les documents ont chacun leur mise en page racine.
+    globalNotFound: true,
     // Envoi des photos produit : une image (8 Mo max, vérifiée côté serveur) par requête.
     serverActions: { bodySizeLimit: "10mb" },
     proxyClientMaxBodySize: "10mb",

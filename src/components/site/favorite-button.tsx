@@ -6,8 +6,10 @@ import { Heart } from "lucide-react";
 import { toggleFavoriteAction } from "@/server/account-actions";
 import { toast } from "@/components/ui/toast";
 import { cn } from "@/lib/utils";
+import { useI18n } from "@/i18n/client";
 
 export function FavoriteButton({ productId, slug }: { productId: number; slug: string }) {
+  const { t, href } = useI18n();
   const router = useRouter();
   const [fav, setFav] = useState(false);
   const [pending, start] = useTransition();
@@ -16,14 +18,14 @@ export function FavoriteButton({ productId, slug }: { productId: number; slug: s
       type="button"
       disabled={pending}
       aria-pressed={fav}
-      aria-label={fav ? "Retirer des favoris" : "Ajouter aux favoris"}
+      aria-label={fav ? t.product.removeFav : t.product.addFav}
       onClick={() =>
         start(async () => {
           const res = await toggleFavoriteAction(productId);
-          if (res.login) return router.push(`/compte/connexion?suite=/produits/${slug}`);
+          if (res.login) return router.push(href(`/compte/connexion?suite=${encodeURIComponent(href(`/produits/${slug}`))}`));
           if (res.ok) {
             setFav(!!res.favorite);
-            toast({ title: res.favorite ? "Ajouté aux favoris" : "Retiré des favoris", action: res.favorite ? { href: "/compte/favoris", label: "Voir mes favoris" } : undefined });
+            toast({ title: res.favorite ? t.product.addedFav : t.product.removedFav, action: res.favorite ? { href: "/compte/favoris", label: t.product.seeFavs } : undefined });
           }
         })
       }

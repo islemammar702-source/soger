@@ -1,18 +1,20 @@
-import Link from "next/link";
 import Image from "next/image";
 import { FileText } from "lucide-react";
 import type { ProductCardData } from "@/server/catalog";
-import { cn, formatTND, withVat } from "@/lib/utils";
+import { Link } from "@/i18n/client";
+import { getI18n } from "@/i18n/server";
+import type { Dict } from "@/i18n/dictionaries";
+import { cn, withVat } from "@/lib/utils";
 import { isOptimizable } from "@/lib/utils";
 import { AddToCartIcon, type CartProduct } from "./add-to-cart";
 import { CategoryIcon } from "./category-icon";
 import { ProPrice } from "./pro-price";
 
-export function availabilityOf(p: Pick<ProductCardData, "available" | "minStock">) {
+export function availabilityOf(p: Pick<ProductCardData, "available" | "minStock">, t: Dict) {
   const qty = Number(p.available);
-  if (qty <= 0) return { label: "Sur commande", tone: "bg-steel/10 text-steel" } as const;
-  if (qty <= Number(p.minStock)) return { label: "Stock limité", tone: "bg-amber-50 text-amber-700" } as const;
-  return { label: "En stock", tone: "bg-accent-soft text-accent-hover" } as const;
+  if (qty <= 0) return { label: t.common.onOrder, tone: "bg-steel/10 text-steel" } as const;
+  if (qty <= Number(p.minStock)) return { label: t.common.limitedStock, tone: "bg-amber-50 text-amber-700" } as const;
+  return { label: t.common.inStock, tone: "bg-accent-soft text-accent-hover" } as const;
 }
 
 export function toCartProduct(p: ProductCardData, icon?: string | null): CartProduct {
@@ -30,9 +32,10 @@ export function toCartProduct(p: ProductCardData, icon?: string | null): CartPro
   };
 }
 
-export function ProductCard({ product, icon, layout = "grid" }: { product: ProductCardData; icon?: string | null; layout?: "grid" | "list" }) {
+export async function ProductCard({ product, icon, layout = "grid" }: { product: ProductCardData; icon?: string | null; layout?: "grid" | "list" }) {
+  const { t, fmt, money, unit } = await getI18n();
   const href = `/produits/${product.slug}`;
-  const stock = availabilityOf(product);
+  const stock = availabilityOf(product, t);
   const price = product.salePrice ? withVat(product.salePrice, product.vatRate) : null;
   const list = layout === "list";
 
@@ -57,7 +60,7 @@ export function ProductCard({ product, icon, layout = "grid" }: { product: Produ
           </div>
         )}
         {product.isNew && (
-          <span className="absolute top-3 left-3 rounded-full bg-ink px-2.5 py-1 text-[11px] font-semibold text-white">Nouveau</span>
+          <span className="absolute start-3 top-3 rounded-full bg-ink px-2.5 py-1 text-[11px] font-semibold text-white">{t.common.newBadge}</span>
         )}
       </Link>
 
@@ -71,28 +74,28 @@ export function ProductCard({ product, icon, layout = "grid" }: { product: Produ
             <Link href={href} className="after:absolute after:inset-0 after:content-['']">{product.name}</Link>
           </h3>
           <p className="mt-1 font-mono text-xs text-steel">
-            Réf. {product.sku}
-            {list && product.manufacturerRef && <span className="hidden sm:inline"> · Fab. {product.manufacturerRef}</span>}
+            {fmt(t.common.ref, { sku: product.sku })}
+            {list && product.manufacturerRef && <span className="hidden sm:inline"> · {fmt(t.common.mfr, { ref: product.manufacturerRef })}</span>}
           </p>
           {list && product.shortDescription && <p className="mt-2 line-clamp-2 hidden text-sm text-steel sm:block">{product.shortDescription}</p>}
         </div>
 
         <div className={cn("flex items-end justify-between gap-3", list ? "sm:flex-col sm:items-end sm:justify-center" : "mt-auto pt-4")}>
-          <div className={cn(list && "sm:text-right")}>
+          <div className={cn(list && "sm:text-end")}>
             {price !== null ? (
               <>
-                <p className="font-display text-lg font-bold text-ink">{formatTND(price)}</p>
-                <p className="text-[11px] text-steel">TTC / {product.unit}</p>
+                <p className="font-display text-lg font-bold text-ink">{money(price)}</p>
+                <p className="text-[11px] text-steel">{fmt(t.common.perUnitTTC, { unit: unit(product.unit) })}</p>
                 <ProPrice productId={product.id} publicHT={product.salePrice} className="mt-1 text-[11px] font-semibold text-accent-hover" />
               </>
             ) : (
-              <p className="text-sm font-medium text-steel">Prix sur devis</p>
+              <p className="text-sm font-medium text-steel">{t.common.priceOnRequest}</p>
             )}
           </div>
           <div className="relative z-10 flex gap-1.5">
             <Link
               href={`/devis?produit=${encodeURIComponent(product.sku)}`}
-              aria-label={`Demander un devis pour ${product.name}`}
+              aria-label={fmt(t.common.quoteFor, { name: product.name })}
               className="grid size-9 place-items-center rounded-lg border border-line text-graphite transition hover:border-ink/30 hover:bg-mist"
             >
               <FileText className="size-4" />

@@ -19,6 +19,11 @@ export type FormState = { status: "idle" } | { status: "error"; message: string;
 
 const phone = z.string().trim().regex(/^[+\d][\d\s.-]{6,19}$/, "Numéro de téléphone invalide");
 const safeNext = (v: unknown, fallback: string) => (typeof v === "string" && /^\/(?!\/)[\w\-/?=&%.]*$/.test(v) ? v : fallback);
+/** Langue du site d'où vient le formulaire (champ caché « lang »), pour les redirections. */
+const langPrefix = (form: FormData) => {
+  const l = form.get("lang");
+  return l === "fr" || l === "en" || l === "ar" ? `/${l}` : "";
+};
 const fieldErrors = (e: z.ZodError) => z.flattenError(e).fieldErrors as Record<string, string[] | undefined>;
 
 /* ─── Inscription ─────────────────────────────────────────────────── */
@@ -89,7 +94,7 @@ export async function registerAction(_: FormState, form: FormData): Promise<Form
     return user.id;
   });
   await createSession(userId);
-  redirect(d.type === "professional" ? "/compte?bienvenue=pro" : "/compte?bienvenue=1");
+  redirect(`${langPrefix(form)}/compte?bienvenue=${d.type === "professional" ? "pro" : "1"}`);
 }
 
 /* ─── Connexion / déconnexion ────────────────────────────────────── */
@@ -124,7 +129,7 @@ export async function loginAction(_: FormState, form: FormData): Promise<FormSta
     await setTierHint(!!c && c.type === "professional" && c.priceTier === "professional");
   }
   await audit({ userId: user.id, module: "auth", action: "login", entityType: "user", entityId: user.id });
-  redirect(safeNext(parsed.data.suite, area === "staff" ? "/admin" : "/compte"));
+  redirect(safeNext(parsed.data.suite, area === "staff" ? "/admin" : `${langPrefix(form)}/compte`));
 }
 
 export async function logoutAction(form: FormData) {
@@ -132,7 +137,7 @@ export async function logoutAction(form: FormData) {
   await destroySession();
   await setTierHint(false);
   if (user) await audit({ userId: user.id, module: "auth", action: "logout", entityType: "user", entityId: user.id });
-  redirect(form.get("area") === "staff" ? "/admin/connexion" : "/");
+  redirect(form.get("area") === "staff" ? "/admin/connexion" : langPrefix(form) || "/");
 }
 
 /* ─── Profil ─────────────────────────────────────────────────────── */
@@ -176,7 +181,7 @@ export async function updateProfileAction(_: FormState, form: FormData): Promise
       .where(eq(customers.id, me.customer.id));
     await audit({ userId: me.user.id, module: "customers", action: "update_profile", entityType: "customer", entityId: me.customer.id }, tx);
   });
-  revalidatePath("/compte");
+  for (const l of ["fr", "en", "ar"]) revalidatePath(`/${l}/compte`);
   return { status: "success", message: "Profil mis à jour." };
 }
 
@@ -205,7 +210,7 @@ export async function toggleFavoriteAction(productId: number): Promise<{ ok: boo
   const [existing] = await db.select().from(favorites).where(and(eq(favorites.userId, me.user.id), eq(favorites.productId, productId)));
   if (existing) await db.delete(favorites).where(and(eq(favorites.userId, me.user.id), eq(favorites.productId, productId)));
   else await db.insert(favorites).values({ userId: me.user.id, productId }).onConflictDoNothing();
-  revalidatePath("/compte/favoris");
+  for (const l of ["fr", "en", "ar"]) revalidatePath(`/${l}/compte/favoris`);
   return { ok: true, favorite: !existing };
 }
 
@@ -213,7 +218,7 @@ export async function markNotificationsReadAction() {
   const user = await getCurrentUser();
   if (!user) return;
   await db.update(notifications).set({ readAt: new Date() }).where(and(eq(notifications.userId, user.id), isNull(notifications.readAt)));
-  revalidatePath("/compte/notifications");
+  for (const l of ["fr", "en", "ar"]) revalidatePath(`/${l}/compte/notifications`);
   revalidatePath("/admin");
 }
 
