@@ -5,15 +5,23 @@ export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
 }
 
-const tnd = new Intl.NumberFormat("fr-TN", {
-  minimumFractionDigits: 3,
-  maximumFractionDigits: 3,
-});
+/**
+ * Format numérique français déterministe (« 12 345,500 »), identique côté serveur
+ * et navigateur : Intl peut varier d'un moteur à l'autre (espace insécable fine ou non),
+ * ce qui provoquait des erreurs d'hydratation.
+ */
+export function formatNumber(value: number, decimals = 0) {
+  if (!Number.isFinite(value)) return "—";
+  const fixed = Math.abs(value).toFixed(decimals);
+  const [int, dec] = fixed.split(".");
+  const grouped = int.replace(/\B(?=(\d{3})+(?!\d))/g, "\u202f");
+  return `${value < 0 && Number(fixed) !== 0 ? "-" : ""}${grouped}${dec ? `,${dec}` : ""}`;
+}
 
 /** Format dinar tunisien : « 1 240,000 DT ». */
 export function formatTND(value: string | number | null | undefined) {
   if (value === null || value === undefined || value === "") return "—";
-  return `${tnd.format(Number(value))} DT`;
+  return `${formatNumber(Number(value), 3)} DT`;
 }
 
 /** Prix TTC à partir d'un prix HT et d'un taux de TVA (en %). */

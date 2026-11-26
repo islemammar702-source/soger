@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { cn } from "@/lib/utils";
+import { cn, formatNumber } from "@/lib/utils";
 
 /**
  * Graphiques légers sans bibliothèque : une seule série (vert SOGER, contraste validé),
@@ -10,7 +10,7 @@ import { cn } from "@/lib/utils";
  */
 type Point = { label: string; value: number; hint?: string };
 
-const nf = new Intl.NumberFormat("fr-TN", { maximumFractionDigits: 0 });
+const nf = { format: (n: number) => formatNumber(n, 0) };
 const defaultFormat = (n: number) => `${nf.format(n)} DT`;
 
 function niceMax(v: number) {

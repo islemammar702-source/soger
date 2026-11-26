@@ -35,7 +35,7 @@ export default async function DashboardPage() {
             )
           }
         />
-        <StatCard label="Commandes du mois" value={String(d.month.count)} sub={d.pendingOrders ? <Link href="/admin/commandes?statut=pending" className="text-amber-700 hover:underline">{d.pendingOrders} en attente de confirmation</Link> : "Aucune en attente"} href="/admin/commandes" />
+        <StatCard label="Commandes du mois" value={String(d.month.count)} sub={d.pendingOrders ? <span className="text-amber-700">{d.pendingOrders} en attente de confirmation</span> : "Aucune en attente"} href={d.pendingOrders ? "/admin/commandes?statut=pending" : "/admin/commandes"} />
         {canCost ? (
           <StatCard label="Marge estimée (mois)" value={formatTND(d.margin.margin)} sub={d.margin.rate === null ? "—" : `Taux ${pct(d.margin.rate).replace("+", "")} sur ${formatTND(d.margin.revenue)} HT${d.margin.uncosted ? ` · ${d.margin.uncosted} ligne(s) sans coût` : ""}`} />
         ) : (
