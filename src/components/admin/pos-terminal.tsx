@@ -75,13 +75,23 @@ export function PosTerminal({ sessionId, canDiscount, canCreateCustomer, initial
   const remaining = round3(Math.max(0, t.total - willPay));
   const change = round3(Math.max(0, willPay - t.total));
   const cashIn = pays.filter((p) => p.method === "cash").reduce((s, p) => s + p.amount, 0) + (pending$ && method === "cash" ? pending$ : 0);
-  const blocker = !lines.length
-    ? "Ajoutez au moins un produit."
+  // Raison qui empêche la validation, avec la correction proposée.
+  const block: { reason: "products" | "customer" | "change"; text: string } | null = !lines.length
+    ? { reason: "products", text: "Ajoutez au moins un produit à la vente." }
     : remaining > 0.0005 && !customer
-      ? "Reste à payer : sélectionnez ou créez un client (le reste sera enregistré en crédit client)."
+      ? { reason: "customer", text: `Il reste ${formatTND(remaining)} à payer. Sans client, la vente doit être payée en totalité : encaissez le total, ou choisissez un client pour mettre le reste en crédit.` }
       : change > cashIn + 0.0005
-        ? "Le trop-perçu ne peut être rendu qu'en espèces."
+        ? { reason: "change", text: "Le montant dépasse le total : la monnaie ne peut être rendue qu'en espèces. Corrigez le montant ou choisissez Espèces." }
         : null;
+  const [showBlock, setShowBlock] = useState(false);
+  const blockRef = useRef<HTMLDivElement>(null);
+  const focusCustomer = () => document.querySelector<HTMLInputElement>('input[aria-label="Rechercher un client"]')?.focus();
+  const payInFull = () => {
+    setPays([]);
+    setOnCredit(false);
+    setMethod("cash");
+    setAmount("");
+  };
 
   // Changement de client : les lignes déjà saisies sont recalculées à SES prix (pro, négociés).
   const customerId = customer?.id ?? null;
@@ -148,11 +158,20 @@ export function PosTerminal({ sessionId, canDiscount, canCreateCustomer, initial
     setInvoice(false);
     setCustomer(null);
     setResult(null);
+    setShowBlock(false);
     setTimeout(() => searchRef.current?.focus(), 0);
   };
 
   const validate = () => {
-    if (blocker || pending) return;
+    if (pending) return;
+    if (block) {
+      // Bouton toujours cliquable : on explique pourquoi la vente ne peut pas encore être validée.
+      setShowBlock(true);
+      setTimeout(() => blockRef.current?.scrollIntoView({ block: "center", behavior: "smooth" }), 0);
+      if (block.reason === "products") searchRef.current?.focus();
+      if (block.reason === "customer") focusCustomer();
+      return;
+    }
     const payments = [...pays, ...(pending$ > 0 ? [{ method, amount: pending$ }] : [])];
     start(async () => {
       const res = await posSaleAction({
@@ -200,7 +219,7 @@ export function PosTerminal({ sessionId, canDiscount, canCreateCustomer, initial
   }
 
   return (
-    <div className="grid gap-5 2xl:grid-cols-[1fr_420px] xl:grid-cols-[1fr_380px]">
+    <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_380px] 2xl:grid-cols-[minmax(0,1fr)_420px]">
       <div className="space-y-5">
         {/* 1. Client */}
         <section className="rounded-xl border border-line bg-white p-4">
@@ -348,9 +367,23 @@ export function PosTerminal({ sessionId, canDiscount, canCreateCustomer, initial
         </div>
 
         {/* 5. Validation */}
-        {(blocker && lines.length > 0) && <p className="rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-800">{blocker}</p>}
+        {block && (lines.length > 0 || showBlock) && (
+          <div ref={blockRef} id="blocker" role="alert" className={cn("rounded-lg border px-3 py-2.5 text-sm", showBlock ? "border-red-200 bg-red-50 text-danger" : "border-amber-200 bg-amber-50 text-amber-800")}>
+            <p className="font-medium">{block.text}</p>
+            <div className="mt-2 flex flex-wrap gap-2">
+              {block.reason === "customer" && (
+                <>
+                  <button type="button" onClick={() => { payInFull(); setShowBlock(false); }} className="rounded-md bg-white px-2.5 py-1 text-xs font-semibold text-ink shadow-sm ring-1 ring-line hover:bg-mist">Encaisser le total en espèces ({formatTND(t.total)})</button>
+                  <button type="button" onClick={focusCustomer} className="rounded-md bg-white px-2.5 py-1 text-xs font-semibold text-ink shadow-sm ring-1 ring-line hover:bg-mist">Choisir un client</button>
+                </>
+              )}
+              {block.reason === "change" && <button type="button" onClick={() => { setMethod("cash"); setShowBlock(false); }} className="rounded-md bg-white px-2.5 py-1 text-xs font-semibold text-ink shadow-sm ring-1 ring-line hover:bg-mist">Passer en espèces</button>}
+              {block.reason === "products" && <button type="button" onClick={() => searchRef.current?.focus()} className="rounded-md bg-white px-2.5 py-1 text-xs font-semibold text-ink shadow-sm ring-1 ring-line hover:bg-mist">Rechercher un produit</button>}
+            </div>
+          </div>
+        )}
         {result && !result.ok && <p role="alert" className="rounded-lg bg-red-50 px-3 py-2 text-sm text-danger">{result.message}</p>}
-        <button type="button" onClick={validate} disabled={!!blocker || pending} className="flex h-14 w-full items-center justify-center gap-2 rounded-xl bg-accent text-lg font-semibold text-white hover:bg-accent-hover disabled:opacity-50">
+        <button type="button" onClick={validate} disabled={pending} aria-describedby={block ? "blocker" : undefined} className={cn("flex h-14 w-full items-center justify-center gap-2 rounded-xl text-lg font-semibold text-white disabled:opacity-60", block ? "bg-accent/60 hover:bg-accent/70" : "bg-accent hover:bg-accent-hover")}>
           {pending ? <Loader2 className="size-5 animate-spin" /> : <CheckCircle2 className="size-5" />} Valider la vente (F9)
         </button>
         {lines.length > 0 && <button type="button" onClick={reset} className="w-full text-center text-xs text-steel hover:text-danger">Annuler la vente en cours</button>}
