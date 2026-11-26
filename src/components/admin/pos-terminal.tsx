@@ -8,7 +8,7 @@ import { posSaleAction, quickCreateCustomerAction, type SaleResult } from "@/ser
 import { documentTotals, round3 } from "@/lib/totals";
 import { cn, formatTND, isOptimizable } from "@/lib/utils";
 import { CustomerPicker, type CustomerRef } from "./doc-editors";
-import { ProductPicker, type ProductHit } from "./line-editor";
+import { ProductPicker, type PickVia, type ProductHit } from "./line-editor";
 
 type Line = { productId: number; sku: string; name: string; manufacturerRef: string | null; brand: string | null; imageUrl: string | null; quantity: number; unitPrice: number; discountRate: number; vatRate: number; available: number };
 type Method = "cash" | "card" | "transfer" | "check";
@@ -103,8 +103,26 @@ export function PosTerminal({ sessionId, canDiscount, canCreateCustomer, initial
     // eslint-disable-next-line react-hooks/exhaustive-deps -- uniquement quand le client change
   }, [customerId]);
 
-  const add = (p: ProductHit) => {
-    if (p.price == null) return alert(`« ${p.name} » n'a pas de prix de vente : vendez-le sur devis.`);
+  const qtyRefs = useRef(new Map<number, HTMLInputElement>());
+  const [flash, setFlash] = useState<{ id: number; n: number } | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
+  const focusQty = (productId: number) =>
+    setTimeout(() => {
+      const el = qtyRefs.current.get(productId);
+      el?.focus();
+      el?.select();
+    }, 0);
+
+  const add = (p: ProductHit, via: PickVia = "enter") => {
+    if (p.price == null) {
+      setNotice(`« ${p.name} » n'a pas de prix de vente enregistré : il ne peut être vendu que sur devis.`);
+      return;
+    }
+    const existing = lines.find((l) => l.productId === p.id);
+    const nextQty = (existing?.quantity ?? 0) + 1;
+    setNotice(p.available < nextQty ? `Attention : stock disponible pour ${p.sku} = ${p.available}. La vente sera refusée si le stock reste insuffisant.` : null);
+    setFlash((f) => ({ id: p.id, n: (f?.n ?? 0) + 1 }));
+    if (via === "tab") focusQty(p.id);
     setLines((ls) => {
       const i = ls.findIndex((l) => l.productId === p.id);
       if (i >= 0) return ls.map((l, j) => (j === i ? { ...l, quantity: l.quantity + 1 } : l));
@@ -201,7 +219,8 @@ export function PosTerminal({ sessionId, canDiscount, canCreateCustomer, initial
         <section className="rounded-xl border border-line bg-white">
           <div className="border-b border-line p-4">
             <h2 className="mb-3 flex items-center gap-2 text-sm font-semibold"><Package className="size-4 text-accent" /> 2. Produits vendus</h2>
-            <ProductPicker onPick={add} customerId={customer?.id} autoFocus inputRef={searchRef} placeholder="Nom, référence SOGER, référence fabricant ou code-barres (F2)…" />
+            <ProductPicker onPick={add} customerId={customer?.id} autoFocus inputRef={searchRef} tabSelects placeholder="Tapez quelques lettres : nom, référence SOGER, référence fabricant ou code-barres (F2)…" />
+            {notice && <p role="status" className="mt-2 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-800">{notice}</p>}
           </div>
           <div className="overflow-x-auto">
             <table className="w-full min-w-[880px] text-sm">
@@ -211,7 +230,7 @@ export function PosTerminal({ sessionId, canDiscount, canCreateCustomer, initial
               <tbody>
                 {lines.length === 0 && <tr><td colSpan={10} className="p-10 text-center text-steel">Scannez un code-barres ou recherchez un produit du catalogue.</td></tr>}
                 {lines.map((l, i) => (
-                  <tr key={l.productId} className="border-t border-line align-middle">
+                  <tr key={l.productId} data-testid="sale-line" className={cn("border-t border-line align-middle transition-colors", flash?.id === l.productId && "animate-[pulse_0.6s_ease-out_1] bg-accent-soft/40")} onAnimationEnd={() => setFlash(null)}>
                     <td className="p-2">
                       <div className="relative grid size-11 place-items-center overflow-hidden rounded-lg bg-mist">
                         {l.imageUrl ? <Image src={l.imageUrl} alt="" fill sizes="44px" className="object-contain p-1" unoptimized={!isOptimizable(l.imageUrl)} /> : <Package className="size-5 text-steel/50" />}
@@ -224,7 +243,21 @@ export function PosTerminal({ sessionId, canDiscount, canCreateCustomer, initial
                     <td className="p-3">
                       <div className="mx-auto flex h-9 w-28 items-center rounded-lg border border-line">
                         <button type="button" onClick={() => upd(i, { quantity: Math.max(1, l.quantity - 1) })} className="grid h-full w-8 place-items-center" aria-label="Diminuer"><Minus className="size-3.5" /></button>
-                        <input value={l.quantity} onChange={(e) => upd(i, { quantity: Math.max(0.001, num(e.target.value) || 1) })} className="h-full w-12 border-x border-line text-center tabular-nums outline-none" aria-label={`Quantité ${l.sku}`} />
+                        <input
+                          ref={(el) => { if (el) qtyRefs.current.set(l.productId, el); else qtyRefs.current.delete(l.productId); }}
+                          value={l.quantity}
+                          inputMode="decimal"
+                          onFocus={(e) => e.target.select()}
+                          onChange={(e) => upd(i, { quantity: Math.max(0.001, num(e.target.value) || 1) })}
+                          onKeyDown={(e) => {
+                            // Entrée : ligne validée, retour à la recherche pour le produit suivant.
+                            if (e.key === "Enter") { e.preventDefault(); searchRef.current?.focus(); }
+                            if (e.key === "ArrowUp") { e.preventDefault(); upd(i, { quantity: l.quantity + 1 }); }
+                            if (e.key === "ArrowDown") { e.preventDefault(); upd(i, { quantity: Math.max(1, l.quantity - 1) }); }
+                          }}
+                          className="h-full w-12 border-x border-line text-center tabular-nums outline-none focus:bg-accent-soft/40"
+                          aria-label={`Quantité ${l.sku}`}
+                        />
                         <button type="button" onClick={() => upd(i, { quantity: l.quantity + 1 })} className="grid h-full w-8 place-items-center" aria-label="Augmenter"><Plus className="size-3.5" /></button>
                       </div>
                     </td>
@@ -242,7 +275,11 @@ export function PosTerminal({ sessionId, canDiscount, canCreateCustomer, initial
             </table>
           </div>
         </section>
-        <p className="text-xs text-steel">Raccourcis : <kbd className="rounded border border-line px-1">F2</kbd> recherche · <kbd className="rounded border border-line px-1">Entrée</kbd> ajoute l&apos;article scanné · <kbd className="rounded border border-line px-1">F9</kbd> valider la vente</p>
+        <p className="text-xs text-steel">
+          Raccourcis : <kbd className="rounded border border-line px-1">F2</kbd> recherche · <kbd className="rounded border border-line px-1">↑</kbd>/<kbd className="rounded border border-line px-1">↓</kbd> parcourir les suggestions ·{" "}
+          <kbd className="rounded border border-line px-1">Entrée</kbd> ajouter (quantité 1) · <kbd className="rounded border border-line px-1">Tab</kbd> ajouter et saisir la quantité, puis <kbd className="rounded border border-line px-1">Entrée</kbd> produit suivant ·{" "}
+          <kbd className="rounded border border-line px-1">F9</kbd> valider la vente
+        </p>
       </div>
 
       <aside className="space-y-4 xl:sticky xl:top-20 xl:self-start">

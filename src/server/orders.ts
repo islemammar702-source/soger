@@ -130,6 +130,8 @@ export async function createOrder(
   const lines = input.lines.map((l, i) => {
     const p = priced.get(l.productId);
     if (!p || (input.channel === "online" && (p.status !== "published" || !p.isActive))) throw new BusinessError("Un produit n'est plus disponible.");
+    // Caisse : uniquement des produits actifs du catalogue (un produit archivé ou désactivé ne se vend plus).
+    if (input.channel === "store" && (p.status === "archived" || !p.isActive)) throw new BusinessError(`« ${p.name} » est archivé ou désactivé : il ne peut plus être vendu.`);
     const unitPrice = l.unitPrice ?? p.price;
     if (unitPrice == null) throw new BusinessError(`« ${p.name} » est vendu sur devis uniquement.`);
     if (!(l.quantity > 0) || l.quantity > 99999) throw new BusinessError("Quantité invalide.");

@@ -1,46 +1,96 @@
 "use client";
 
+import Image from "next/image";
 import { useEffect, useRef, useState } from "react";
-import { Plus, Search, Trash2 } from "lucide-react";
-import { documentTotals } from "@/lib/totals";
-import { cn, formatTND } from "@/lib/utils";
+import { Loader2, Package, Plus, Search, Trash2 } from "lucide-react";
+import { documentTotals, round3 } from "@/lib/totals";
+import { cn, formatTND, isOptimizable } from "@/lib/utils";
 
 export type EditorLine = { productId: number | null; sku: string | null; description: string; quantity: number; unitPrice: number; discountRate: number; vatRate: number };
 export type ProductHit = { id: number; sku: string; name: string; unit: string; vatRate: number; price: number | null; cost: number | null; available: number; exact: boolean; manufacturerRef?: string | null; brand?: string | null; imageUrl?: string | null };
 
-/** Recherche produit (référence, nom, code-barres) avec navigation clavier. */
-export function ProductPicker({ onPick, customerId, placeholder = "Ajouter un produit : référence, nom ou code-barres…", autoFocus, inputRef }: { onPick: (p: ProductHit) => void; customerId?: number | null; placeholder?: string; autoFocus?: boolean; inputRef?: React.RefObject<HTMLInputElement | null> }) {
+export type PickVia = "enter" | "tab" | "click";
+
+/** Cache partagé des recherches (évite de relancer une requête identique). */
+const searchCache = new Map<string, { at: number; items: ProductHit[] }>();
+const CACHE_MS = 30_000;
+
+async function searchProducts(term: string, customerId: number | null | undefined, signal?: AbortSignal) {
+  const key = `${customerId ?? 0}|${term.toLowerCase()}`;
+  const hit = searchCache.get(key);
+  if (hit && Date.now() - hit.at < CACHE_MS) return hit.items;
+  const res = await fetch(`/admin/api/produits?q=${encodeURIComponent(term)}${customerId ? `&client=${customerId}` : ""}`, { signal });
+  if (!res.ok) throw new Error(String(res.status));
+  const items: ProductHit[] = (await res.json()).items;
+  searchCache.set(key, { at: Date.now(), items });
+  if (searchCache.size > 200) searchCache.delete(searchCache.keys().next().value!);
+  return items;
+}
+
+/** Met en évidence les mots tapés dans un texte. */
+function Mark({ text, terms }: { text: string; terms: string[] }) {
+  if (!terms.length) return <>{text}</>;
+  const re = new RegExp(`(${terms.map((t) => t.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("|")})`, "ig");
+  return <>{text.split(re).map((part, i) => (i % 2 ? <mark key={i} className="rounded-sm bg-amber-100 px-0 text-inherit">{part}</mark> : part))}</>;
+}
+
+/**
+ * Recherche produit (nom, référence SOGER, référence fabricant, code-barres) avec suggestions instantanées.
+ * Clavier : ↑/↓ parcourir · Entrée choisir · Tab choisir puis passer à la quantité (si `onPick` le gère) · Échap fermer.
+ * Lecteur code-barres : saisie + Entrée immédiate → produit exact ajouté.
+ */
+export function ProductPicker({ onPick, customerId, placeholder = "Ajouter un produit : référence, nom ou code-barres…", autoFocus, inputRef, tabSelects = false, showStock = true }: { onPick: (p: ProductHit, via: PickVia) => void; customerId?: number | null; placeholder?: string; autoFocus?: boolean; inputRef?: React.RefObject<HTMLInputElement | null>; tabSelects?: boolean; showStock?: boolean }) {
   const [q, setQ] = useState("");
   const [hits, setHits] = useState<ProductHit[]>([]);
+  const [open, setOpen] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [searched, setSearched] = useState("");
   const [active, setActive] = useState(0);
   const localRef = useRef<HTMLInputElement>(null);
+  const listRef = useRef<HTMLUListElement>(null);
   const ref = inputRef ?? localRef;
+  const term = q.trim();
 
   useEffect(() => {
-    const term = q.trim();
     if (term.length < 2) return;
     const ctrl = new AbortController();
+    // Délai court : on n'interroge le serveur que lorsque la frappe marque une pause (120 ms).
     const t = setTimeout(async () => {
+      setLoading(true);
       try {
-        const res = await fetch(`/admin/api/produits?q=${encodeURIComponent(term)}${customerId ? `&client=${customerId}` : ""}`, { signal: ctrl.signal });
-        if (res.ok) {
-          setHits((await res.json()).items);
-          setActive(0);
-        }
-      } catch {}
-    }, 150);
+        const items = await searchProducts(term, customerId, ctrl.signal);
+        setHits(items);
+        setSearched(term);
+        setActive(0);
+        setOpen(true);
+      } catch {
+        /* requête annulée ou échouée : on garde l'affichage précédent */
+      } finally {
+        if (!ctrl.signal.aborted) setLoading(false);
+      }
+    }, 120);
     return () => {
       ctrl.abort();
       clearTimeout(t);
     };
-  }, [q, customerId]);
+  }, [term, customerId]);
 
-  const pick = (p: ProductHit) => {
-    onPick(p);
-    setQ("");
+  useEffect(() => {
+    listRef.current?.querySelector<HTMLElement>(`[data-index="${active}"]`)?.scrollIntoView({ block: "nearest" });
+  }, [active]);
+
+  const close = () => {
+    setOpen(false);
     setHits([]);
-    ref.current?.focus();
   };
+  const pick = (p: ProductHit, via: PickVia) => {
+    setQ("");
+    close();
+    onPick(p, via);
+    if (via !== "tab") ref.current?.focus();
+  };
+  const terms = searched.toLowerCase().split(/\s+/).filter((w) => w.length >= 1);
+  const showList = open && term.length >= 2 && (hits.length > 0 || (!loading && searched === term));
 
   return (
     <div className="relative">
@@ -49,42 +99,74 @@ export function ProductPicker({ onPick, customerId, placeholder = "Ajouter un pr
         ref={ref}
         value={q}
         autoFocus={autoFocus}
+        autoComplete="off"
+        spellCheck={false}
+        role="combobox"
+        aria-expanded={showList}
+        aria-controls="product-suggestions"
+        aria-autocomplete="list"
+        aria-activedescendant={showList && hits[active] ? `product-option-${hits[active].id}` : undefined}
         onChange={(e) => {
           setQ(e.target.value);
-          if (e.target.value.trim().length < 2) setHits([]);
+          if (e.target.value.trim().length < 2) close();
         }}
+        onFocus={() => { if (hits.length) setOpen(true); }}
+        onBlur={() => setTimeout(() => setOpen(false), 150)}
         onKeyDown={async (e) => {
-          if (e.key === "ArrowDown") { e.preventDefault(); setActive((i) => Math.min(hits.length - 1, i + 1)); }
-          if (e.key === "ArrowUp") { e.preventDefault(); setActive((i) => Math.max(0, i - 1)); }
-          if (e.key === "Escape") setHits([]);
-          if (e.key === "Enter") {
+          if (e.key === "ArrowDown") { e.preventDefault(); setOpen(true); setActive((i) => Math.min(hits.length - 1, i + 1)); }
+          else if (e.key === "ArrowUp") { e.preventDefault(); setActive((i) => Math.max(0, i - 1)); }
+          else if (e.key === "Escape") { if (showList) { e.stopPropagation(); close(); } }
+          else if (e.key === "Tab" && tabSelects && showList && hits[active] && !e.shiftKey) { e.preventDefault(); pick(hits[active], "tab"); }
+          else if (e.key === "Enter") {
             e.preventDefault();
-            // Lecteur code-barres : saisie + Entrée immédiate → recherche exacte.
-            if (hits[active]) return pick(hits[active]);
-            const term = q.trim();
             if (!term) return;
-            const res = await fetch(`/admin/api/produits?q=${encodeURIComponent(term)}${customerId ? `&client=${customerId}` : ""}`);
-            const items: ProductHit[] = res.ok ? (await res.json()).items : [];
-            const exact = items.find((i) => i.exact) ?? (items.length === 1 ? items[0] : null);
-            if (exact) pick(exact);
-            else setHits(items);
+            // Résultats à jour pour ce texte : on prend la suggestion surlignée.
+            if (showList && searched === term && hits[active]) return pick(hits[active], "enter");
+            // Sinon (lecteur code-barres, frappe très rapide) : recherche immédiate.
+            setLoading(true);
+            try {
+              const items = await searchProducts(term, customerId);
+              const exact = items.find((i) => i.exact) ?? (items.length === 1 ? items[0] : null);
+              if (exact) pick(exact, "enter");
+              else { setHits(items); setSearched(term); setActive(0); setOpen(true); }
+            } catch {} finally { setLoading(false); }
           }
         }}
         placeholder={placeholder}
         aria-label="Rechercher un produit"
-        className="h-11 w-full rounded-lg border border-line bg-white pr-3 pl-9 text-sm outline-none focus:border-accent focus:ring-4 focus:ring-accent/10"
+        className="h-11 w-full rounded-lg border border-line bg-white pr-9 pl-9 text-sm outline-none focus:border-accent focus:ring-4 focus:ring-accent/10"
       />
-      {hits.length > 0 && (
-        <ul className="absolute inset-x-0 top-full z-30 mt-1 max-h-80 overflow-y-auto rounded-xl border border-line bg-white py-1 shadow-lift" role="listbox">
+      {loading && <Loader2 className="absolute top-1/2 right-3 size-4 -translate-y-1/2 animate-spin text-steel" aria-hidden />}
+      {showList && (
+        <ul ref={listRef} id="product-suggestions" className="absolute inset-x-0 top-full z-30 mt-1 max-h-[26rem] overflow-y-auto rounded-xl border border-line bg-white py-1 shadow-lift" role="listbox" aria-label="Suggestions de produits">
+          {hits.length === 0 && <li className="px-4 py-3 text-sm text-steel">Aucun produit du catalogue ne correspond à « {searched} ».</li>}
           {hits.map((h, i) => (
-            <li key={h.id} role="option" aria-selected={i === active}>
-              <button type="button" onMouseDown={(e) => e.preventDefault()} onClick={() => pick(h)} onMouseEnter={() => setActive(i)} className={cn("flex w-full items-center gap-3 px-3 py-2 text-left text-sm", i === active && "bg-mist")}>
-                <span className="min-w-0 flex-1"><span className="block truncate font-medium">{h.name}</span><span className="font-mono text-xs text-steel">{h.sku}</span></span>
-                <span className={cn("text-xs", h.available <= 0 ? "text-danger" : "text-steel")}>stock {h.available}</span>
-                <span className="w-24 text-right text-xs font-semibold">{h.price == null ? "sur devis" : formatTND(h.price)}</span>
+            <li key={h.id} id={`product-option-${h.id}`} role="option" aria-selected={i === active} data-index={i}>
+              <button type="button" tabIndex={-1} onMouseDown={(e) => e.preventDefault()} onClick={() => pick(h, "click")} onMouseMove={() => setActive(i)} className={cn("flex w-full items-center gap-3 px-3 py-2 text-left text-sm", i === active && "bg-accent-soft/60")}>
+                <span className="relative grid size-10 shrink-0 place-items-center overflow-hidden rounded-md border border-line bg-mist">
+                  {h.imageUrl ? <Image src={h.imageUrl} alt="" fill sizes="40px" className="object-contain p-0.5" unoptimized={!isOptimizable(h.imageUrl)} /> : <Package className="size-4 text-steel/50" />}
+                </span>
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate font-medium"><Mark text={h.name} terms={terms} /></span>
+                  <span className="block truncate text-xs text-steel">
+                    Réf : <span className="font-mono text-ink"><Mark text={h.sku} terms={terms} /></span>
+                    {h.manufacturerRef && <> · Fab : <span className="font-mono"><Mark text={h.manufacturerRef} terms={terms} /></span></>}
+                    {h.brand && <> · {h.brand}</>}
+                  </span>
+                </span>
+                {showStock && <span className={cn("shrink-0 rounded-full px-2 py-0.5 text-xs", h.available <= 0 ? "bg-red-50 text-danger" : "bg-mist text-steel")}>{h.available <= 0 ? "Rupture" : `Stock ${h.available}`}</span>}
+                <span className="w-28 shrink-0 text-right">
+                  {h.price == null ? <span className="text-xs text-steel">sur devis</span> : (
+                    <>
+                      <span className="block font-semibold tabular-nums">{formatTND(round3(h.price * (1 + h.vatRate / 100)))}</span>
+                      <span className="block text-[11px] text-steel tabular-nums">{formatTND(h.price)} HT</span>
+                    </>
+                  )}
+                </span>
               </button>
             </li>
           ))}
+          {hits.length > 0 && <li className="border-t border-line px-3 pt-1.5 pb-1 text-[11px] text-steel">↑ ↓ parcourir · Entrée ajouter{tabSelects ? " · Tab ajouter et saisir la quantité" : ""} · Échap fermer</li>}
         </ul>
       )}
     </div>
