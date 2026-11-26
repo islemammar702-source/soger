@@ -38,7 +38,7 @@ export default async function StoreSalesPage({ searchParams }: PageProps<"/admin
                 <tr key={s.id} className="hover:bg-mist/40">
                   <Td><Link href={`/admin/caisse/ventes/${s.id}`} className="font-mono text-xs font-semibold text-accent">{s.number}</Link>{s.status === "returned" && <Badge className="ml-1" tone="bg-violet-50 text-violet-700">Retour</Badge>}</Td>
                   <Td className="whitespace-nowrap text-steel">{formatDateTime(s.at)}</Td>
-                  <Td>{s.party ?? <span className="text-steel">Client comptoir</span>}{s.phone && <p className="text-xs text-steel">{s.phone}</p>}</Td>
+                  <Td>{s.party ?? <span className="text-steel">Client de passage</span>}{s.phone && <p className="text-xs text-steel">{s.phone}</p>}</Td>
                   <Td className="text-right tabular-nums">{s.items}</Td>
                   <Td className="text-right font-semibold tabular-nums">{formatTND(s.total)}</Td>
                   <Td className="text-right tabular-nums">{formatTND(s.paid)}</Td>

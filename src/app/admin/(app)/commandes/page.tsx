@@ -42,7 +42,7 @@ export default async function OrdersPage({ searchParams }: PageProps<"/admin/com
               <tr key={o.id} className="hover:bg-mist/40">
                 <Td><Link href={`/admin/commandes/${o.id}`} className="font-mono text-xs font-semibold text-accent">{o.number}</Link></Td>
                 <Td className="whitespace-nowrap text-steel">{formatDateTime(o.createdAt)}</Td>
-                <Td>{company || [first, last].filter(Boolean).join(" ") || o.shippingName || <span className="text-steel">Client comptoir</span>}</Td>
+                <Td>{company || [first, last].filter(Boolean).join(" ") || o.shippingName || <span className="text-steel">Client de passage</span>}</Td>
                 <Td className="text-xs">{CHANNEL[o.channel]}</Td>
                 <Td><Badge tone={label(ORDER_STATUS, o.status).tone}>{label(ORDER_STATUS, o.status).label}</Badge></Td>
                 <Td><Badge tone={label(PAYMENT_STATUS, o.paymentStatus).tone}>{label(PAYMENT_STATUS, o.paymentStatus).label}</Badge></Td>

@@ -3,8 +3,8 @@
 import Image from "next/image";
 import Link from "next/link";
 import { useEffect, useRef, useState, useTransition } from "react";
-import { ArrowLeft, Banknote, CheckCircle2, CreditCard, FileText, HandCoins, Landmark, Loader2, Minus, Package, Plus, Printer, ReceiptText, Trash2, UserPlus, UserRound, X } from "lucide-react";
-import { posSaleAction, quickCreateCustomerAction, type SaleResult } from "@/server/admin/pos";
+import { ArrowLeft, Banknote, History, Users, UserCheck, ShoppingBag, CheckCircle2, CreditCard, FileText, HandCoins, Landmark, Loader2, Minus, Package, Plus, Printer, ReceiptText, Trash2, UserPlus, UserRound, X } from "lucide-react";
+import { posCustomerSummaryAction, posSaleAction, quickCreateCustomerAction, type PosCustomerSummary, type SaleResult } from "@/server/admin/pos";
 import { documentTotals, round3 } from "@/lib/totals";
 import { cn, formatTND, isOptimizable } from "@/lib/utils";
 import { CustomerPicker, type CustomerRef } from "./doc-editors";
@@ -51,9 +51,60 @@ function QuickCustomer({ onCreated, onCancel }: { onCreated: (c: CustomerRef) =>
   );
 }
 
+/** Fiche du client sélectionné : coordonnées, crédit en cours, derniers achats. */
+function CustomerCard({ customerId }: { customerId: number }) {
+  const [data, setData] = useState<PosCustomerSummary | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  useEffect(() => {
+    let alive = true;
+    posCustomerSummaryAction(customerId)
+      .then((r) => { if (!alive) return; if (r.ok) { setData(r.data); setError(null); } else setError(r.message); })
+      .catch(() => alive && setError("Informations du client indisponibles."));
+    return () => { alive = false; };
+  }, [customerId]);
+  if (error) return <p className="mt-3 text-xs text-steel">{error}</p>;
+  if (!data || data.id !== customerId) return <div className="mt-3 h-24 animate-pulse rounded-lg bg-mist" aria-busy />;
+  const over = data.credit && data.credit.limit != null && data.credit.due > data.credit.limit;
+  return (
+    <div className="mt-3 grid gap-3 rounded-lg border border-line bg-mist/40 p-3 text-sm md:grid-cols-[1fr_1fr]" data-testid="customer-card">
+      <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1">
+        <dt className="text-steel">Téléphone</dt><dd>{data.phone ?? "—"}</dd>
+        {data.email && (<><dt className="text-steel">E-mail</dt><dd className="truncate">{data.email}</dd></>)}
+        <dt className="text-steel">Adresse</dt><dd>{data.address ?? "—"}</dd>
+        {data.taxId && (<><dt className="text-steel">Matricule</dt><dd className="font-mono text-xs">{data.taxId}</dd></>)}
+        <dt className="text-steel">Tarif</dt><dd>{data.pro ? "Professionnel" : "Public"}</dd>
+      </dl>
+      <div className="space-y-2">
+        {data.credit && (
+          <p className={cn("flex items-center justify-between rounded-md px-2.5 py-1.5", data.credit.due > 0.0005 ? (over ? "bg-red-50 text-danger" : "bg-amber-50 text-amber-800") : "bg-accent-soft/50 text-accent-hover")}>
+            <span>Crédit en cours</span>
+            <strong className="tabular-nums">{formatTND(data.credit.due)}{data.credit.limit != null && <span className="font-normal"> / plafond {formatTND(data.credit.limit)}</span>}</strong>
+          </p>
+        )}
+        <p className="flex items-center justify-between text-xs text-steel"><span className="flex items-center gap-1"><History className="size-3.5" /> {data.purchases.count} achat(s) · {formatTND(data.purchases.total)}</span>
+          <Link href={`/admin/clients/${data.id}`} target="_blank" className="font-medium text-accent hover:underline">Historique complet</Link>
+        </p>
+        {data.purchases.last.length > 0 ? (
+          <ul className="space-y-0.5 text-xs">
+            {data.purchases.last.map((o) => (
+              <li key={o.id} className="flex justify-between gap-2">
+                <Link href={o.store ? `/admin/caisse/ventes/${o.id}` : `/admin/commandes/${o.id}`} target="_blank" className="font-mono text-accent hover:underline">{o.number}</Link>
+                <span className="text-steel">{new Date(o.at).toLocaleDateString("fr-TN")}</span>
+                <span className="tabular-nums">{formatTND(o.total)}{o.inProgress ? <span className="ml-1 text-steel">(commande en cours)</span> : o.remaining > 0.0005 && <span className="ml-1 text-amber-700">(reste {formatTND(o.remaining)})</span>}</span>
+              </li>
+            ))}
+          </ul>
+        ) : <p className="text-xs text-steel">Aucun achat enregistré.</p>}
+      </div>
+    </div>
+  );
+}
+
 export function PosTerminal({ sessionId, canDiscount, canCreateCustomer, initialCustomer }: { sessionId: number; canDiscount: boolean; canCreateCustomer: boolean; initialCustomer: CustomerRef | null }) {
   const [lines, setLines] = useState<Line[]>([]);
   const [customer, setCustomer] = useState<CustomerRef | null>(initialCustomer);
+  // Type de client : enregistré, ou « client de passage » (aucune identité, aucun client créé en base).
+  const [mode, setMode] = useState<"existing" | "walkin">(initialCustomer ? "existing" : "walkin");
   const [creating, setCreating] = useState(false);
   const [globalDiscount, setGlobalDiscount] = useState(0);
   const [pays, setPays] = useState<Pay[]>([]);
@@ -76,16 +127,29 @@ export function PosTerminal({ sessionId, canDiscount, canCreateCustomer, initial
   const change = round3(Math.max(0, willPay - t.total));
   const cashIn = pays.filter((p) => p.method === "cash").reduce((s, p) => s + p.amount, 0) + (pending$ && method === "cash" ? pending$ : 0);
   // Raison qui empêche la validation, avec la correction proposée.
-  const block: { reason: "products" | "customer" | "change"; text: string } | null = !lines.length
+  const block: { reason: "products" | "customer" | "pick" | "change"; text: string } | null = !lines.length
     ? { reason: "products", text: "Ajoutez au moins un produit à la vente." }
-    : remaining > 0.0005 && !customer
-      ? { reason: "customer", text: `Il reste ${formatTND(remaining)} à payer. Sans client, la vente doit être payée en totalité : encaissez le total, ou choisissez un client pour mettre le reste en crédit.` }
+    : mode === "existing" && !customer
+      ? { reason: "pick", text: "Client existant : recherchez et sélectionnez le client, ou choisissez « Client de passage »." }
+      : remaining > 0.0005 && !customer
+      ? { reason: "customer", text: `Il reste ${formatTND(remaining)} à payer. Un client de passage doit payer la totalité : encaissez le total, ou passez en « Client existant » pour mettre le reste en crédit.` }
       : change > cashIn + 0.0005
         ? { reason: "change", text: "Le montant dépasse le total : la monnaie ne peut être rendue qu'en espèces. Corrigez le montant ou choisissez Espèces." }
         : null;
   const [showBlock, setShowBlock] = useState(false);
   const blockRef = useRef<HTMLDivElement>(null);
-  const focusCustomer = () => document.querySelector<HTMLInputElement>('input[aria-label="Rechercher un client"]')?.focus();
+  const focusCustomer = () => setTimeout(() => document.querySelector<HTMLInputElement>('input[aria-label="Rechercher un client"]')?.focus(), 0);
+  const chooseMode = (m: "existing" | "walkin") => {
+    setMode(m);
+    setShowBlock(false);
+    if (m === "walkin") {
+      // Client de passage : pas de client, donc ni crédit ni facture nominative.
+      setCustomer(null);
+      setInvoice(false);
+      setOnCredit(false);
+      setCreating(false);
+    } else focusCustomer();
+  };
   const payInFull = () => {
     setPays([]);
     setOnCredit(false);
@@ -157,6 +221,8 @@ export function PosTerminal({ sessionId, canDiscount, canCreateCustomer, initial
     setOnCredit(false);
     setInvoice(false);
     setCustomer(null);
+    setMode("walkin");
+    setCreating(false);
     setResult(null);
     setShowBlock(false);
     setTimeout(() => searchRef.current?.focus(), 0);
@@ -169,7 +235,7 @@ export function PosTerminal({ sessionId, canDiscount, canCreateCustomer, initial
       setShowBlock(true);
       setTimeout(() => blockRef.current?.scrollIntoView({ block: "center", behavior: "smooth" }), 0);
       if (block.reason === "products") searchRef.current?.focus();
-      if (block.reason === "customer") focusCustomer();
+      if (block.reason === "pick") focusCustomer();
       return;
     }
     const payments = [...pays, ...(pending$ > 0 ? [{ method, amount: pending$ }] : [])];
@@ -223,15 +289,41 @@ export function PosTerminal({ sessionId, canDiscount, canCreateCustomer, initial
       <div className="space-y-5">
         {/* 1. Client */}
         <section className="rounded-xl border border-line bg-white p-4">
-          <h2 className="mb-3 flex items-center gap-2 text-sm font-semibold"><UserRound className="size-4 text-accent" /> 1. Client</h2>
-          <div className="flex flex-wrap items-start gap-3">
-            <div className="min-w-64 flex-1"><CustomerPicker value={customer} onChange={(c) => { setCustomer(c); if (!c) setInvoice(false); }} /></div>
-            {!customer && canCreateCustomer && !creating && (
-              <button type="button" onClick={() => setCreating(true)} className="inline-flex h-11 items-center gap-2 rounded-lg border border-line px-3 text-sm font-medium hover:bg-mist"><UserPlus className="size-4" /> Nouveau client</button>
-            )}
+          <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+            <h2 className="flex items-center gap-2 text-sm font-semibold"><UserRound className="size-4 text-accent" /> 1. Client</h2>
+            <div role="radiogroup" aria-label="Type de client" className="inline-flex rounded-lg border border-line bg-mist/50 p-1">
+              <button type="button" role="radio" aria-checked={mode === "existing"} onClick={() => chooseMode("existing")} className={cn("inline-flex h-9 items-center gap-1.5 rounded-md px-3 text-sm font-medium transition", mode === "existing" ? "bg-white text-ink shadow-sm ring-1 ring-line" : "text-steel hover:text-ink")}>
+                <Users className="size-4" /> Client existant
+              </button>
+              <button type="button" role="radio" aria-checked={mode === "walkin"} onClick={() => chooseMode("walkin")} className={cn("inline-flex h-9 items-center gap-1.5 rounded-md px-3 text-sm font-medium transition", mode === "walkin" ? "bg-white text-ink shadow-sm ring-1 ring-line" : "text-steel hover:text-ink")}>
+                <ShoppingBag className="size-4" /> Client de passage
+              </button>
+            </div>
           </div>
-          {creating && !customer && <QuickCustomer onCreated={(c) => { setCustomer(c); setCreating(false); }} onCancel={() => setCreating(false)} />}
-          <p className="mt-2 text-xs text-steel">{customer ? `Le client est enregistré avec la vente${repriced > 0 && lines.length ? " ; les prix ont été recalculés selon ses tarifs" : ""}.` : "Sans client : vente comptoir, paiement intégral obligatoire."}</p>
+          {mode === "walkin" ? (
+            <div className="flex items-start gap-3 rounded-lg bg-mist/60 px-3 py-2.5 text-sm" data-testid="walkin">
+              <ShoppingBag className="mt-0.5 size-4 shrink-0 text-accent" />
+              <p><strong>Client de passage</strong> — aucune information demandée. Ajoutez les produits et validez. <span className="text-steel">Paiement intégral obligatoire : le crédit exige un client identifié.</span></p>
+            </div>
+          ) : (
+            <>
+              <div className="flex flex-wrap items-start gap-3">
+                <div className="min-w-64 flex-1"><CustomerPicker value={customer} onChange={(c) => { setCustomer(c); if (!c) setInvoice(false); }} /></div>
+                {!customer && canCreateCustomer && !creating && (
+                  <button type="button" onClick={() => setCreating(true)} className="inline-flex h-11 items-center gap-2 rounded-lg border border-line px-3 text-sm font-medium hover:bg-mist"><UserPlus className="size-4" /> Nouveau client</button>
+                )}
+              </div>
+              {creating && !customer && <QuickCustomer onCreated={(c) => { setCustomer(c); setCreating(false); }} onCancel={() => setCreating(false)} />}
+              {customer ? (
+                <>
+                  <CustomerCard customerId={customer.id} />
+                  <p className="mt-2 flex items-center gap-1.5 text-xs text-steel"><UserCheck className="size-3.5 text-accent" /> Client enregistré avec la vente{repriced > 0 && lines.length ? " ; les prix ont été recalculés selon ses tarifs" : ""}. Paiement partiel ou crédit possible.</p>
+                </>
+              ) : (
+                !creating && <p className="mt-2 text-xs text-steel">Recherchez par nom, téléphone, code ou matricule fiscal.</p>
+              )}
+            </>
+          )}
         </section>
 
         {/* 2. Produits */}
@@ -336,7 +428,7 @@ export function PosTerminal({ sessionId, canDiscount, canCreateCustomer, initial
                 <Icon className="size-5" /> {text}
               </button>
             ))}
-            <button type="button" onClick={() => { setOnCredit(true); setAmount(""); }} className={cn("flex flex-col items-center gap-1 rounded-lg border py-2 text-[11px] font-medium", onCredit ? "border-amber-500 bg-amber-50 text-amber-800" : "border-line text-graphite hover:bg-mist")}>
+            <button type="button" disabled={mode === "walkin"} title={mode === "walkin" ? "Crédit impossible pour un client de passage : choisissez « Client existant »." : "Vente à crédit (client requis)"} onClick={() => { setOnCredit(true); setAmount(""); }} className={cn("flex flex-col items-center gap-1 rounded-lg border py-2 text-[11px] font-medium disabled:cursor-not-allowed disabled:opacity-40", onCredit ? "border-amber-500 bg-amber-50 text-amber-800" : "border-line text-graphite hover:bg-mist")}>
               <HandCoins className="size-5" /> Crédit
             </button>
           </div>
@@ -346,7 +438,7 @@ export function PosTerminal({ sessionId, canDiscount, canCreateCustomer, initial
                 <input value={amount} onChange={(e) => setAmount(e.target.value)} onKeyDown={(e) => e.key === "Enter" && (e.preventDefault(), addPayment())} placeholder={`Montant ${label(method).toLowerCase()} (${Math.max(0, t.total - paid).toFixed(3)})`} inputMode="decimal" className="h-11 min-w-0 flex-1 rounded-lg border border-line px-3 text-right tabular-nums" aria-label="Montant reçu" />
                 <button type="button" onClick={() => addPayment()} className="h-11 rounded-lg border border-line px-3 text-sm font-medium hover:bg-mist" title="Ajouter ce paiement (paiement mixte)">+ Ajouter</button>
               </div>
-              <p className="mt-1.5 text-xs text-steel">Montant inférieur au total = paiement partiel (reste en crédit client). « + Ajouter » pour combiner plusieurs modes.</p>
+              <p className="mt-1.5 text-xs text-steel">{mode === "walkin" ? "Client de passage : encaissez la totalité." : "Montant inférieur au total = paiement partiel (reste en crédit client)."} « + Ajouter » pour combiner plusieurs modes.</p>
             </>
           ) : (
             <p className="mt-3 rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-800">{paid > 0 ? "Le reste" : "Le total"} sera enregistré en <strong>crédit client</strong>{customer ? ` sur le compte de ${customer.name}` : " : sélectionnez un client"}. Aucune somme n&apos;entre en caisse.</p>
@@ -374,10 +466,16 @@ export function PosTerminal({ sessionId, canDiscount, canCreateCustomer, initial
               {block.reason === "customer" && (
                 <>
                   <button type="button" onClick={() => { payInFull(); setShowBlock(false); }} className="rounded-md bg-white px-2.5 py-1 text-xs font-semibold text-ink shadow-sm ring-1 ring-line hover:bg-mist">Encaisser le total en espèces ({formatTND(t.total)})</button>
-                  <button type="button" onClick={focusCustomer} className="rounded-md bg-white px-2.5 py-1 text-xs font-semibold text-ink shadow-sm ring-1 ring-line hover:bg-mist">Choisir un client</button>
+                  <button type="button" onClick={() => chooseMode("existing")} className="rounded-md bg-white px-2.5 py-1 text-xs font-semibold text-ink shadow-sm ring-1 ring-line hover:bg-mist">Passer en client existant</button>
                 </>
               )}
               {block.reason === "change" && <button type="button" onClick={() => { setMethod("cash"); setShowBlock(false); }} className="rounded-md bg-white px-2.5 py-1 text-xs font-semibold text-ink shadow-sm ring-1 ring-line hover:bg-mist">Passer en espèces</button>}
+              {block.reason === "pick" && (
+                <>
+                  <button type="button" onClick={focusCustomer} className="rounded-md bg-white px-2.5 py-1 text-xs font-semibold text-ink shadow-sm ring-1 ring-line hover:bg-mist">Rechercher le client</button>
+                  <button type="button" onClick={() => chooseMode("walkin")} className="rounded-md bg-white px-2.5 py-1 text-xs font-semibold text-ink shadow-sm ring-1 ring-line hover:bg-mist">Client de passage</button>
+                </>
+              )}
               {block.reason === "products" && <button type="button" onClick={() => searchRef.current?.focus()} className="rounded-md bg-white px-2.5 py-1 text-xs font-semibold text-ink shadow-sm ring-1 ring-line hover:bg-mist">Rechercher un produit</button>}
             </div>
           </div>

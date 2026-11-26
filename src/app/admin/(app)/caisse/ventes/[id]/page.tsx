@@ -42,7 +42,7 @@ export default async function SalePage({ params, searchParams }: PageProps<"/adm
   const total = Number(inv?.total ?? o.total);
   const paid = Number(inv?.amountPaid ?? o.amountPaid);
   const rest = Math.max(0, total - paid);
-  const name = c ? c.c.companyName || [c.c.firstName, c.c.lastName].filter(Boolean).join(" ") : "Client comptoir";
+  const name = c ? c.c.companyName || [c.c.firstName, c.c.lastName].filter(Boolean).join(" ") : "Client de passage";
   const canReturn = me.can("orders.return") && ["delivered", "returned"].includes(o.status);
   return (
     <>

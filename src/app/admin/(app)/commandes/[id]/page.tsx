@@ -33,7 +33,7 @@ export default async function OrderPage({ params, searchParams }: PageProps<"/ad
   const canUpdate = me.can("orders.update");
   const invoice = invs.find((i) => i.kind === "customer" && i.status !== "cancelled");
   const remaining = Number(invoice ? Number(invoice.total) - Number(invoice.amountPaid) : Number(o.total) - Number(o.amountPaid));
-  const name = c ? c.companyName || [c.firstName, c.lastName].filter(Boolean).join(" ") : o.shippingName || "Client comptoir";
+  const name = c ? c.companyName || [c.firstName, c.lastName].filter(Boolean).join(" ") : o.shippingName || "Client de passage";
   return (
     <>
       <PageHeader

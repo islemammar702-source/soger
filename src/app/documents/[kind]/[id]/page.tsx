@@ -81,7 +81,7 @@ async function load(kind: string, id: number, token?: string): Promise<Doc | "de
     if (!o) return null;
     if (!(can("orders.view") || can("pos.use") || (me && o.customerId === me.customer.id))) return "denied";
     const items = await db.select().from(orderItems).where(eq(orderItems.orderId, id)).orderBy(asc(orderItems.sortOrder));
-    const p = (await partyOf(o.customerId)) ?? { name: o.shippingName ?? "Client comptoir", lines: [] };
+    const p = (await partyOf(o.customerId)) ?? { name: o.shippingName ?? "Client de passage", lines: [] };
     return {
       title: kind === "ticket" ? "TICKET" : "BON DE LIVRAISON",
       number: o.number,
@@ -153,7 +153,7 @@ async function DocumentView({ params, searchParams }: PageProps<"/documents/[kin
           {doc.paid !== undefined && <p className="flex justify-between"><span>Payé</span><span>{formatTND(doc.paid)}</span></p>}
           {doc.paid !== undefined && Number(doc.total) - Number(doc.paid) > 0.0005 && <p className="flex justify-between font-bold"><span>RESTE À PAYER</span><span>{formatTND(Number(doc.total) - Number(doc.paid))}</span></p>}
         </div>
-        {doc.party.name && doc.party.name !== "Client comptoir" && <p className="mt-2">Client : {doc.party.name}</p>}
+        {doc.party.name && <p className="mt-2">Client : {doc.party.name}</p>}
         <p className="mt-3 text-center">{s.sales.invoiceFooter}</p>
         <PrintButton auto />
       </div>

@@ -62,7 +62,7 @@ export default async function CashDeskPage({ searchParams }: PageProps<"/admin/c
                 <Td className="whitespace-nowrap text-steel">{formatDateTime(o.at).split(" ").pop()}</Td>
                 <Td className={`font-medium ${KIND_TONE[o.kind]}`}>{o.label}</Td>
                 <Td className="font-mono text-xs">{o.href && o.ref ? <Link href={o.href} className="text-accent hover:underline">{o.ref}</Link> : (o.ref ?? "—")}</Td>
-                <Td>{o.party ?? <span className="text-steel">Client comptoir</span>}</Td>
+                <Td>{o.party ?? <span className="text-steel">Client de passage</span>}</Td>
                 <Td className="text-xs">{o.method ? PAYMENT_METHOD[o.method] : "—"}</Td>
                 <Td className="text-xs text-steel">{o.user ?? "—"}</Td>
                 <Td className={`text-right font-semibold tabular-nums ${KIND_TONE[o.kind]}`}>{o.kind === "payment_out" || o.kind === "expense" ? "−" : o.kind === "payment_in" ? "+" : ""}{formatTND(o.amount)}</Td>

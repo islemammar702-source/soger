@@ -265,3 +265,69 @@ export async function posPaymentAction(form: FormData) {
   }
   redirect(`${back}?ok=${encodeURIComponent(msg)}`);
 }
+
+/* ─── Fiche client en caisse ───────────────────────────────────────── */
+
+export type PosCustomerSummary = {
+  id: number;
+  code: string;
+  name: string;
+  phone: string | null;
+  email: string | null;
+  address: string | null;
+  taxId: string | null;
+  pro: boolean;
+  /** null si le rôle n'a pas la permission « customers.view_balance ». */
+  credit: { due: number; limit: number | null } | null;
+  purchases: { count: number; total: number; last: { id: number; number: string; at: string; total: number; remaining: number; store: boolean; inProgress: boolean }[] };
+};
+
+/** Informations, crédit et derniers achats du client sélectionné en caisse. */
+export async function posCustomerSummaryAction(customerId: number): Promise<{ ok: true; data: PosCustomerSummary } | { ok: false; message: string }> {
+  let me;
+  try {
+    me = await assertStaff("pos.use");
+    if (!me.can("customers.view")) throw new AccessDenied("customers.view");
+  } catch (e) {
+    return { ok: false, message: e instanceof AccessDenied ? e.message : "Accès refusé." };
+  }
+  const id = Number(customerId);
+  if (!Number.isInteger(id) || id <= 0) return { ok: false, message: "Client invalide." };
+  const [c] = await db.select().from(customers).where(eq(customers.id, id));
+  if (!c) return { ok: false, message: "Client introuvable." };
+
+  const saleTotal = sql<string>`coalesce(${invoices.total}, ${orders.total})`;
+  const salePaid = sql<string>`coalesce(${invoices.amountPaid}, ${orders.amountPaid})`;
+  const notCancelled = and(eq(orders.customerId, id), sql`${orders.status} <> 'cancelled'`);
+  const invJoin = and(eq(invoices.orderId, orders.id), eq(invoices.kind, "customer"), sql`${invoices.status} <> 'cancelled'`);
+  const [last, [agg], [due]] = await Promise.all([
+    db
+      .select({ id: orders.id, number: orders.number, at: orders.createdAt, channel: orders.channel, status: orders.status, invoiced: invoices.id, total: saleTotal, paid: salePaid })
+      .from(orders)
+      .leftJoin(invoices, invJoin)
+      .where(notCancelled)
+      .orderBy(sql`${orders.createdAt} desc`)
+      .limit(5),
+    db.select({ n: sql<number>`count(*)::int`, total: sql<string>`coalesce(sum(${saleTotal}), 0)` }).from(orders).leftJoin(invoices, invJoin).where(notCancelled),
+    me.can("customers.view_balance") ? db.select({ due: customerDueFor(id) }).from(sql`(select 1) as one`) : Promise.resolve([{ due: null }]),
+  ]);
+  return {
+    ok: true,
+    data: {
+      id: c.id,
+      code: c.code,
+      name: c.companyName || [c.firstName, c.lastName].filter(Boolean).join(" "),
+      phone: c.phone,
+      email: c.email,
+      address: [c.address, c.postalCode, c.city].filter(Boolean).join(", ") || null,
+      taxId: c.taxId,
+      pro: c.type === "professional" && c.priceTier === "professional",
+      credit: due.due == null ? null : { due: Number(due.due), limit: c.creditLimit == null ? null : Number(c.creditLimit) },
+      purchases: {
+        count: agg.n,
+        total: Number(agg.total),
+        last: last.map((o) => ({ id: o.id, number: o.number, at: o.at.toISOString(), total: Number(o.total), remaining: Math.max(0, round3(Number(o.total) - Number(o.paid))), store: o.channel === "store", inProgress: !o.invoiced && !["shipped", "delivered"].includes(o.status) })),
+      },
+    },
+  };
+}
