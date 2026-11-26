@@ -1,36 +1,35 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# SOGER – Plateforme e-commerce industrielle + ERP
 
-## Getting Started
+Next.js 16 (App Router, Cache Components) · TypeScript · Tailwind CSS 4 · Drizzle ORM · PostgreSQL / Neon · React Three Fiber.
 
-First, run the development server:
+## Démarrage
 
 ```bash
+cp .env.example .env        # renseigner DATABASE_URL
+npm install
+npm run db:migrate          # applique les migrations (n'efface jamais de données)
+npm run db:seed             # rôles, permissions, catégories, marques, dépôt
+npm run db:seed -- --demo   # + 39 produits de démonstration
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## Règles du projet
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+- **Jamais** de `drizzle-kit push` ni de reset en production : uniquement `db:generate` puis `db:migrate`.
+- Le stock ne se modifie **que** via `applyStockMovement()` (`src/server/inventory.ts`), dans une transaction.
+- Numérotation des documents via `nextDocumentNumber()` (`src/server/sequences.ts`), dans la transaction du document.
+- Montants en `numeric(14,3)` (dinars, millimes). Prix stockés HT, affichés TTC au public.
+- Permissions : `src/lib/permissions.ts` (module × action), vérifiées côté serveur.
+- Coordonnées de l'entreprise : `src/config/site.ts` (valeurs `TODO` à compléter).
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## Structure
 
-## Learn More
-
-To learn more about Next.js, take a look at the following resources:
-
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+```
+src/app/(site)/        site public
+src/components/site/   composants du site
+src/components/three/  scène 3D du hero (chargée à la demande)
+src/db/schema/         schéma Drizzle (36 tables)
+src/db/seed/           seed idempotent
+src/server/            accès données et actions serveur
+drizzle/               migrations SQL
+```
