@@ -5,6 +5,7 @@ import {
   date,
   index,
   integer,
+  jsonb,
   pgTable,
   text,
   timestamp,
@@ -12,7 +13,7 @@ import {
 } from "drizzle-orm/pg-core";
 import { money, qty, rate, timestamps } from "./_shared";
 import { users } from "./auth";
-import { products } from "./catalog";
+import { mediaFiles, products } from "./catalog";
 import { warehouses } from "./inventory";
 import { customers, suppliers } from "./parties";
 import { purchaseOrders } from "./purchasing";
@@ -63,6 +64,15 @@ export const invoices = pgTable(
     total: money("total").notNull().default("0"),
     amountPaid: money("amount_paid").notNull().default("0"),
     notes: text("notes"),
+    /**
+     * Factures fournisseurs : « stock » (marchandises, entrée en stock à la validation),
+     * « received » (déjà réceptionnées via un bon de réception), « expense » (frais / services).
+     */
+    purchaseType: text("purchase_type"),
+    /** Fichier original (PDF ou photo) conservé en base, privé. */
+    sourceFileId: integer("source_file_id").references(() => mediaFiles.id, { onDelete: "set null" }),
+    /** Données brutes extraites automatiquement (historique de la reconnaissance). */
+    extractedData: jsonb("extracted_data"),
     createdBy: integer("created_by").references(() => users.id, {
       onDelete: "set null",
     }),
@@ -74,6 +84,10 @@ export const invoices = pgTable(
     index("invoices_customer_idx").on(t.customerId, t.issueDate),
     index("invoices_supplier_idx").on(t.supplierId, t.issueDate),
     index("invoices_status_idx").on(t.status, t.dueDate),
+    // Une même facture fournisseur (même fournisseur + même numéro) ne peut être saisie deux fois.
+    uniqueIndex("invoices_supplier_ref_uq")
+      .on(t.supplierId, sql`lower(${t.externalRef})`)
+      .where(sql`${t.kind} = 'supplier' and ${t.status} <> 'cancelled' and ${t.externalRef} is not null`),
     check(
       "invoices_party",
       sql`(${t.kind} = 'supplier' and ${t.supplierId} is not null) or (${t.kind} <> 'supplier' and ${t.customerId} is not null)`,
@@ -92,6 +106,9 @@ export const invoiceItems = pgTable(
       onDelete: "restrict",
     }),
     sku: text("sku"),
+    /** Factures fournisseurs : référence fabricant et marque telles que facturées. */
+    manufacturerRef: text("manufacturer_ref"),
+    brand: text("brand"),
     description: text("description").notNull(),
     quantity: qty("quantity").notNull(),
     unitPrice: money("unit_price").notNull(),

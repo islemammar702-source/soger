@@ -2,7 +2,8 @@ import Link from "next/link";
 import { and, desc, ilike, or, sql, type SQL } from "drizzle-orm";
 import { db } from "@/db";
 import { invoices } from "@/db/schema";
-import { Card, EmptyRow, FilterBar, FilterSelect, PageHeader, Pagination, StatCard, Table, Td, Th, listHref, one } from "@/components/admin/ui";
+import { FilePlus2, ScanLine } from "lucide-react";
+import { Card, EmptyRow, FilterBar, Flash, btn, FilterSelect, PageHeader, Pagination, StatCard, Table, Td, Th, listHref, one } from "@/components/admin/ui";
 import { Badge } from "@/components/ui/badge";
 import { INVOICE_STATUS, formatDate, label } from "@/lib/labels";
 import { formatTND } from "@/lib/utils";
@@ -12,11 +13,14 @@ const PAGE = 50;
 const KIND: Record<string, string> = { customer: "Client", supplier: "Fournisseur", credit_note: "Avoir" };
 
 export default async function InvoicesPage({ searchParams }: PageProps<"/admin/factures">) {
-  await requireStaff("invoices.view");
+  const me = await requireStaff("invoices.view");
   const sp = await searchParams;
   const page = Math.max(1, Number(one(sp.page)) || 1);
   const q = one(sp.q).trim();
   const conds: (SQL | undefined)[] = [];
+  // Factures fournisseurs (prix d'achat) : visibles uniquement par les rôles qui voient les coûts.
+  const seeSupplier = me.can("products.view_cost");
+  if (!seeSupplier) conds.push(sql`${invoices.kind} <> 'supplier'`);
   if (q) conds.push(or(ilike(invoices.number, `%${q}%`), ilike(invoices.billingName, `%${q}%`), ilike(invoices.externalRef, `%${q}%`)));
   if (one(sp.type)) conds.push(sql`${invoices.kind} = ${one(sp.type)}`);
   if (one(sp.statut) === "impayees") conds.push(sql`${invoices.status} in ('issued','partially_paid')`);
@@ -34,11 +38,21 @@ export default async function InvoicesPage({ searchParams }: PageProps<"/admin/f
   ]);
   return (
     <>
-      <PageHeader title="Factures" description="Factures clients, avoirs et factures fournisseurs." />
+      <PageHeader
+        title="Factures"
+        description="Factures clients, avoirs et factures fournisseurs."
+        actions={me.can("invoices.create") && seeSupplier && (
+          <>
+            <Link href="/admin/factures/importer" className={btn.outline}><ScanLine className="size-4" /> Importer / scanner une facture</Link>
+            <Link href="/admin/factures/nouvelle" className={btn.primary}><FilePlus2 className="size-4" /> Nouvelle facture manuelle</Link>
+          </>
+        )}
+      />
+      <Flash sp={sp} />
       <div className="mb-4 grid gap-4 sm:grid-cols-3">
         <StatCard label="Créances clients" value={formatTND(sum.receivable)} href="/admin/factures?type=customer&statut=impayees" />
         <StatCard label="dont échues" value={formatTND(sum.overdue)} tone={Number(sum.overdue) > 0 ? "danger" : "default"} href="/admin/factures?type=customer&statut=echues" />
-        <StatCard label="Dettes fournisseurs" value={formatTND(sum.payable)} href="/admin/factures?type=supplier&statut=impayees" />
+        {seeSupplier && <StatCard label="Dettes fournisseurs" value={formatTND(sum.payable)} href="/admin/factures?type=supplier&statut=impayees" />}
       </div>
       <FilterBar action="/admin/factures" q={q} placeholder="N°, client, fournisseur, réf. externe…">
         <FilterSelect name="type" label="Tous les types" value={one(sp.type)} options={Object.entries(KIND)} />

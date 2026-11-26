@@ -66,7 +66,7 @@ La matrice module × action est modifiable dans **Utilisateurs → Rôles et per
    npm run admin:create -- --email vous@soger.tn --name "Votre nom"
    ```
 3. **Vercel** : *Add New → Project*, importez le dépôt GitHub `soger`.
-4. Variables d'environnement Vercel : `DATABASE_URL`, `NEXT_PUBLIC_SITE_URL` (ex. `https://soger.tn`), `APP_SECRET`, et si besoin `CLOUDINARY_URL`, `RESEND_API_KEY`, `MAIL_FROM`.
+4. Variables d'environnement Vercel : `DATABASE_URL`, `NEXT_PUBLIC_SITE_URL` (ex. `https://soger.tn`), `APP_SECRET`, et si besoin `CLOUDINARY_URL`, `RESEND_API_KEY`, `MAIL_FROM`, `ANTHROPIC_API_KEY` (lecture automatique des factures fournisseurs).
 5. *Deploy*. Chaque `git push` sur `main` redéploie automatiquement.
 6. Domaine : *Settings → Domains* sur Vercel, puis les enregistrements DNS indiqués chez votre registraire.
 

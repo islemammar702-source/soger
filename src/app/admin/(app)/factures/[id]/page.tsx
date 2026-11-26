@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { asc, desc, eq } from "drizzle-orm";
 import { db } from "@/db";
 import { invoiceItems, invoices, orders, payments } from "@/db/schema";
@@ -11,12 +11,15 @@ import { addPaymentAction, creditNoteAction, deletePaymentAction } from "@/serve
 import { requireStaff } from "@/server/auth/dal";
 import { documentUrl } from "@/server/documents";
 
+const PURCHASE_TYPE: Record<string, string> = { stock: "Marchandises — entrée en stock", received: "Marchandises déjà réceptionnées", expense: "Frais / services" };
+
 export default async function InvoicePage({ params, searchParams }: PageProps<"/admin/factures/[id]">) {
   const me = await requireStaff("invoices.view");
   const id = Number((await params).id);
   const sp = await searchParams;
   const [f] = await db.select().from(invoices).where(eq(invoices.id, id));
   if (!f) notFound();
+  if (f.kind === "supplier" && !me.can("products.view_cost")) redirect("/admin/acces-refuse?p=products.view_cost");
   const [items, pays, [order], credited] = await Promise.all([
     db.select().from(invoiceItems).where(eq(invoiceItems.invoiceId, id)).orderBy(asc(invoiceItems.sortOrder)),
     db.select().from(payments).where(eq(payments.invoiceId, id)).orderBy(desc(payments.paidAt)),
@@ -34,6 +37,7 @@ export default async function InvoicePage({ params, searchParams }: PageProps<"/
         actions={
           <>
             {f.kind !== "supplier" && <a href={`/documents/facture/${id}`} target="_blank" className={btn.outline}>PDF / Imprimer</a>}
+            {f.sourceFileId && <a href={`/media/${f.sourceFileId}`} target="_blank" className={btn.outline}>Voir la facture originale</a>}
             {f.kind === "customer" && me.can("invoices.cancel") && f.status !== "cancelled" && credited.length === 0 && <form action={creditNoteAction}><input type="hidden" name="id" value={id} /><button className={btn.danger}>Émettre un avoir</button></form>}
           </>
         }
@@ -42,10 +46,12 @@ export default async function InvoicePage({ params, searchParams }: PageProps<"/
       <div className="grid gap-6 xl:grid-cols-[1fr_360px]">
         <Card title="Détail" padded={false}>
           {items.length > 0 ? (
-            <table className="w-full text-sm">
-              <thead className="bg-mist/60 text-xs text-steel uppercase"><tr><th className="p-3 text-left">Désignation</th><th className="p-3 text-right">Qté</th><th className="p-3 text-right">PU HT</th><th className="p-3 text-right">TVA</th><th className="p-3 text-right">Total HT</th></tr></thead>
-              <tbody>{items.map((i) => <tr key={i.id} className="border-t border-line"><td className="p-3">{i.description}<p className="font-mono text-xs text-steel">{i.sku}</p></td><td className="p-3 text-right">{Number(i.quantity)}</td><td className="p-3 text-right">{formatTND(i.unitPrice)}{Number(i.discountRate) ? <span className="block text-xs text-steel">−{Number(i.discountRate)} %</span> : null}</td><td className="p-3 text-right">{Number(i.vatRate)} %</td><td className="p-3 text-right font-medium">{formatTND(i.lineTotal)}</td></tr>)}</tbody>
+            <div className="overflow-x-auto">
+            <table className="w-full min-w-[640px] text-sm">
+              <thead className="bg-mist/60 text-xs text-steel uppercase"><tr><th className="p-3 text-left">Désignation</th>{f.kind === "supplier" && <><th className="p-3 text-left">Réf. fabricant</th><th className="p-3 text-left">Marque</th></>}<th className="p-3 text-right">Qté</th><th className="p-3 text-right">PU HT</th><th className="p-3 text-right">TVA</th><th className="p-3 text-right">Total HT</th></tr></thead>
+              <tbody>{items.map((i) => <tr key={i.id} className="border-t border-line"><td className="p-3">{i.productId && f.kind === "supplier" ? <Link href={`/admin/produits/${i.productId}`} className="hover:text-accent">{i.description}</Link> : i.description}<p className="font-mono text-xs text-steel">{i.sku}{f.kind === "supplier" && !i.productId && " · non associé au catalogue"}</p></td>{f.kind === "supplier" && <><td className="p-3 font-mono text-xs">{i.manufacturerRef ?? "—"}</td><td className="p-3 text-xs">{i.brand ?? "—"}</td></>}<td className="p-3 text-right">{Number(i.quantity)}</td><td className="p-3 text-right">{formatTND(i.unitPrice)}{Number(i.discountRate) ? <span className="block text-xs text-steel">−{Number(i.discountRate)} %</span> : null}</td><td className="p-3 text-right">{Number(i.vatRate)} %</td><td className="p-3 text-right font-medium">{formatTND(i.lineTotal)}</td></tr>)}</tbody>
             </table>
+            </div>
           ) : <p className="p-5 text-sm text-steel">Facture saisie en montants globaux{f.externalRef ? ` (réf. fournisseur ${f.externalRef})` : ""}.</p>}
           <dl className="space-y-1 border-t border-line p-4 text-sm">
             <div className="flex justify-between"><dt className="text-steel">Total HT</dt><dd>{formatTND(Number(f.subtotal) - Number(f.discountTotal))}</dd></div>
@@ -61,6 +67,11 @@ export default async function InvoicePage({ params, searchParams }: PageProps<"/
               {f.purchaseOrderId && <li>Commande fournisseur : <Link href={`/admin/achats/${f.purchaseOrderId}`} className="text-accent">voir</Link></li>}
               {f.customerId && <li>Client : <Link href={`/admin/clients/${f.customerId}`} className="text-accent">fiche client</Link></li>}
               {f.supplierId && <li>Fournisseur : <Link href={`/admin/fournisseurs/${f.supplierId}`} className="text-accent">fiche fournisseur</Link></li>}
+              {f.externalRef && <li>N° facture fournisseur : <span className="font-mono">{f.externalRef}</span></li>}
+              {f.billingTaxId && <li>Matricule fiscal : <span className="font-mono">{f.billingTaxId}</span></li>}
+              {f.purchaseType && <li>Type : {PURCHASE_TYPE[f.purchaseType] ?? f.purchaseType}</li>}
+              {f.sourceFileId && <li>Original : <a href={`/media/${f.sourceFileId}`} target="_blank" className="text-accent">ouvrir</a> · <a href={`/media/${f.sourceFileId}?telecharger`} className="text-accent">télécharger</a></li>}
+              {f.extractedData != null && <li className="text-xs text-steel">Saisie assistée par lecture automatique, vérifiée avant enregistrement.</li>}
               {f.creditedInvoiceId && <li>Avoir sur : <Link href={`/admin/factures/${f.creditedInvoiceId}`} className="text-accent">facture d&apos;origine</Link></li>}
               {credited.map((c) => <li key={c.id}>Avoir : <Link href={`/admin/factures/${c.id}`} className="font-mono text-accent">{c.number}</Link></li>)}
               {f.kind === "customer" && <li className="pt-2 text-xs text-steel">Lien client : <code className="break-all">{documentUrl("facture", id)}</code></li>}

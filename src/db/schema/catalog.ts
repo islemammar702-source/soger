@@ -146,6 +146,10 @@ export const mediaFiles = pgTable("media_files", {
   width: integer("width"),
   height: integer("height"),
   data: bytea("data").notNull(),
+  /** Nom d'origine du fichier (factures fournisseurs importées). */
+  fileName: text("file_name"),
+  /** Privé = réservé au personnel autorisé (ex. factures), jamais servi publiquement. */
+  isPrivate: boolean("is_private").notNull().default(false),
   ...timestamps,
 });
 
