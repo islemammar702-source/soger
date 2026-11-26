@@ -6,7 +6,7 @@ type Tx = PgDatabase<PgQueryResultHKT, Record<string, unknown>>;
 
 const PREFIX: Record<string, string> = {
   quote: "DEV", order: "CMD", invoice: "FAC", credit_note: "AV",
-  purchase_order: "BCF", goods_receipt: "BR", customer: "CLI", supplier: "FRS",
+  purchase_order: "BCF", goods_receipt: "BR", customer: "CLI", supplier: "FRS", supplier_invoice: "FF",
 };
 /** Séquences non annuelles (codes clients / fournisseurs). */
 const PERPETUAL = new Set(["customer", "supplier"]);

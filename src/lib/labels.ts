@@ -77,6 +77,6 @@ export const MOVEMENT_TYPE: Record<string, string> = {
 export const label = (map: Record<string, Label>, key: string) => map[key] ?? t(key, gray);
 
 const dateFmt = new Intl.DateTimeFormat("fr-TN", { day: "2-digit", month: "2-digit", year: "numeric", timeZone: "Africa/Tunis" });
-const dateTimeFmt = new Intl.DateTimeFormat("fr-TN", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit", timeZone: "Africa/Tunis" });
+const dateTimeFmt = new Intl.DateTimeFormat("fr-TN", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit", hourCycle: "h23", timeZone: "Africa/Tunis" });
 export const formatDate = (d: Date | string | null | undefined) => (d ? dateFmt.format(new Date(d)) : "—");
 export const formatDateTime = (d: Date | string | null | undefined) => (d ? dateTimeFmt.format(new Date(d)) : "—");
