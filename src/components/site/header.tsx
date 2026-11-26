@@ -5,35 +5,22 @@ import { usePathname } from "next/navigation";
 import { useEffect, useState, useSyncExternalStore } from "react";
 import { createPortal } from "react-dom";
 import { AnimatePresence, motion } from "motion/react";
-import { ChevronRight, FileText, Menu, Search, ShoppingCart, User, X } from "lucide-react";
+import { ChevronRight, FileText, Menu, ShoppingCart, User, X } from "lucide-react";
 import { mainNav } from "@/config/site";
 import { cn } from "@/lib/utils";
+import { useCartCount } from "@/lib/cart";
 import { Logo } from "./logo";
+import { SearchBox } from "./search-box";
 
 const noop = () => () => {};
 
 type NavCategory = { slug: string; name: string };
 
-function SearchForm({ className, autoFocus }: { className?: string; autoFocus?: boolean }) {
-  return (
-    <form action="/produits" role="search" className={cn("relative", className)}>
-      <Search className="pointer-events-none absolute top-1/2 left-3.5 size-4 -translate-y-1/2 text-steel" aria-hidden />
-      <input
-        name="q"
-        type="search"
-        autoFocus={autoFocus}
-        placeholder="Référence, produit, marque…"
-        aria-label="Rechercher un produit"
-        className="h-11 w-full rounded-lg border border-line bg-mist/70 pr-4 pl-10 text-sm text-ink transition outline-none placeholder:text-steel/80 focus:border-accent focus:bg-white focus:ring-4 focus:ring-accent/10"
-      />
-    </form>
-  );
-}
-
 export function Header({ categories }: { categories: NavCategory[] }) {
   const pathname = usePathname();
   const [scrolled, setScrolled] = useState(false);
   const [open, setOpen] = useState(false);
+  const cartCount = useCartCount();
   const mounted = useSyncExternalStore(noop, () => true, () => false);
 
   useEffect(() => {
@@ -85,7 +72,7 @@ export function Header({ categories }: { categories: NavCategory[] }) {
           ))}
         </nav>
 
-        <SearchForm className="ml-auto hidden max-w-md flex-1 md:block" />
+        <SearchBox className="ml-auto hidden max-w-md flex-1 md:block" />
 
         <div className="ml-auto flex items-center gap-1 md:ml-0">
           <Link
@@ -97,8 +84,13 @@ export function Header({ categories }: { categories: NavCategory[] }) {
           <Link href="/compte" aria-label="Mon compte" className="grid size-10 place-items-center rounded-lg text-ink transition hover:bg-mist">
             <User className="size-5" strokeWidth={1.8} />
           </Link>
-          <Link href="/panier" aria-label="Panier" className="relative grid size-10 place-items-center rounded-lg text-ink transition hover:bg-mist">
+          <Link href="/panier" aria-label={cartCount ? `Panier (${cartCount} article${cartCount > 1 ? "s" : ""})` : "Panier"} className="relative grid size-10 place-items-center rounded-lg text-ink transition hover:bg-mist">
             <ShoppingCart className="size-5" strokeWidth={1.8} />
+            {cartCount > 0 && (
+              <span className="absolute -top-0.5 -right-0.5 grid h-5 min-w-5 place-items-center rounded-full bg-accent px-1 text-[11px] font-semibold text-white ring-2 ring-white">
+                {cartCount > 99 ? "99+" : cartCount}
+              </span>
+            )}
           </Link>
           <button
             type="button"
@@ -114,7 +106,7 @@ export function Header({ categories }: { categories: NavCategory[] }) {
 
       {/* Recherche mobile */}
       <div className="container-soger pb-3 md:hidden">
-        <SearchForm />
+        <SearchBox />
       </div>
 
       {/* Navigation secondaire : catégories industrielles */}

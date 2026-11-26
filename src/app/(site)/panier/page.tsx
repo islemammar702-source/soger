@@ -1,8 +1,16 @@
 import type { Metadata } from "next";
-import { ComingSoon } from "@/components/site/coming-soon";
+import { CartView } from "@/components/site/cart-view";
+import { PageHero } from "@/components/site/page-hero";
 
 export const metadata: Metadata = { title: "Panier", robots: { index: false } };
 
 export default function CartPage() {
-  return <ComingSoon title="Panier" href="/panier" text="La commande en ligne arrive très bientôt. En attendant, envoyez-nous une demande de devis avec vos références." />;
+  return (
+    <>
+      <PageHero title="Panier" crumbs={[{ href: "/panier", label: "Panier" }]} />
+      <section className="container-soger py-10 lg:py-14">
+        <CartView />
+      </section>
+    </>
+  );
 }

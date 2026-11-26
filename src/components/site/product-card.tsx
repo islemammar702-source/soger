@@ -1,8 +1,9 @@
 import Link from "next/link";
 import Image from "next/image";
-import { FileText, ShoppingCart } from "lucide-react";
+import { FileText } from "lucide-react";
 import type { ProductCardData } from "@/server/catalog";
 import { cn, formatTND, withVat } from "@/lib/utils";
+import { AddToCartIcon, type CartProduct } from "./add-to-cart";
 import { CategoryIcon } from "./category-icon";
 
 export function availabilityOf(p: Pick<ProductCardData, "available" | "minStock">) {
@@ -12,32 +13,45 @@ export function availabilityOf(p: Pick<ProductCardData, "available" | "minStock"
   return { label: "En stock", tone: "bg-accent-soft text-accent-hover" } as const;
 }
 
+export function toCartProduct(p: ProductCardData, icon?: string | null): CartProduct {
+  return {
+    productId: p.id,
+    slug: p.slug,
+    sku: p.sku,
+    name: p.name,
+    brandName: p.brandName,
+    unit: p.unit,
+    unitPrice: p.salePrice,
+    vatRate: p.vatRate,
+    icon: icon ?? null,
+    imageUrl: p.imageUrl,
+  };
+}
+
 export function ProductCard({ product, icon, layout = "grid" }: { product: ProductCardData; icon?: string | null; layout?: "grid" | "list" }) {
   const href = `/produits/${product.slug}`;
   const stock = availabilityOf(product);
   const price = product.salePrice ? withVat(product.salePrice, product.vatRate) : null;
+  const list = layout === "list";
 
   return (
     <article
       className={cn(
         "group relative flex overflow-hidden rounded-[var(--radius-card)] border border-line bg-white shadow-soft transition duration-300 hover:-translate-y-0.5 hover:border-ink/15 hover:shadow-lift",
-        layout === "grid" ? "flex-col" : "flex-row",
+        list ? "flex-row" : "flex-col",
       )}
     >
       <Link
         href={href}
-        className={cn(
-          "relative block shrink-0 overflow-hidden bg-gradient-to-br from-mist to-white",
-          layout === "grid" ? "aspect-[4/3]" : "w-36 sm:w-48",
-        )}
+        className={cn("relative block shrink-0 overflow-hidden bg-gradient-to-br from-mist to-white", list ? "w-28 sm:w-44" : "aspect-[4/3]")}
         tabIndex={-1}
         aria-hidden
       >
         {product.imageUrl ? (
-          <Image src={product.imageUrl} alt="" fill sizes="(min-width: 1024px) 25vw, (min-width: 640px) 50vw, 100vw" className="object-contain p-4 transition duration-500 group-hover:scale-105" />
+          <Image src={product.imageUrl} alt="" fill sizes={list ? "176px" : "(min-width: 1280px) 25vw, (min-width: 640px) 50vw, 100vw"} className="object-contain p-4 transition duration-500 group-hover:scale-105" />
         ) : (
           <div className="grid h-full place-items-center">
-            <CategoryIcon name={icon} className="size-14 text-steel/35 transition duration-500 group-hover:scale-110 group-hover:text-accent/60" />
+            <CategoryIcon name={icon} className={cn("text-steel/35 transition duration-500 group-hover:scale-110 group-hover:text-accent/60", list ? "size-10" : "size-14")} />
           </div>
         )}
         {product.isNew && (
@@ -45,18 +59,24 @@ export function ProductCard({ product, icon, layout = "grid" }: { product: Produ
         )}
       </Link>
 
-      <div className="flex flex-1 flex-col p-4">
-        <div className="flex items-center justify-between gap-2 text-[11px] font-medium tracking-wide text-steel uppercase">
-          <span className="truncate">{product.brandName}</span>
-          <span className={cn("shrink-0 rounded-full px-2 py-0.5 normal-case tracking-normal", stock.tone)}>{stock.label}</span>
+      <div className={cn("flex min-w-0 flex-1 p-4", list ? "flex-col gap-3 sm:flex-row sm:items-center" : "flex-col")}>
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center justify-between gap-2 text-[11px] font-medium tracking-wide text-steel uppercase">
+            <span className="truncate">{product.brandName}</span>
+            <span className={cn("shrink-0 rounded-full px-2 py-0.5 tracking-normal normal-case", stock.tone)}>{stock.label}</span>
+          </div>
+          <h3 className="mt-2 line-clamp-2 font-sans text-[15px] leading-snug font-semibold tracking-normal text-ink">
+            <Link href={href} className="after:absolute after:inset-0 after:content-['']">{product.name}</Link>
+          </h3>
+          <p className="mt-1 font-mono text-xs text-steel">
+            Réf. {product.sku}
+            {list && product.manufacturerRef && <span className="hidden sm:inline"> · Fab. {product.manufacturerRef}</span>}
+          </p>
+          {list && product.shortDescription && <p className="mt-2 line-clamp-2 hidden text-sm text-steel sm:block">{product.shortDescription}</p>}
         </div>
-        <h3 className="mt-2 line-clamp-2 font-sans text-[15px] leading-snug font-semibold tracking-normal text-ink">
-          <Link href={href} className="after:absolute after:inset-0 after:content-['']">{product.name}</Link>
-        </h3>
-        <p className="mt-1 font-mono text-xs text-steel">Réf. {product.sku}</p>
 
-        <div className="mt-auto flex items-end justify-between gap-3 pt-4">
-          <div>
+        <div className={cn("flex items-end justify-between gap-3", list ? "sm:flex-col sm:items-end sm:justify-center" : "mt-auto pt-4")}>
+          <div className={cn(list && "sm:text-right")}>
             {price !== null ? (
               <>
                 <p className="font-display text-lg font-bold text-ink">{formatTND(price)}</p>
@@ -74,13 +94,7 @@ export function ProductCard({ product, icon, layout = "grid" }: { product: Produ
             >
               <FileText className="size-4" />
             </Link>
-            <Link
-              href={href}
-              aria-label={`Commander ${product.name}`}
-              className="grid size-9 place-items-center rounded-lg bg-accent text-white transition hover:bg-accent-hover"
-            >
-              <ShoppingCart className="size-4" />
-            </Link>
+            <AddToCartIcon product={toCartProduct(product, icon)} />
           </div>
         </div>
       </div>

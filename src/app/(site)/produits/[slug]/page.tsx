@@ -1,15 +1,16 @@
 import type { Metadata } from "next";
-import Image from "next/image";
+import Link from "next/link";
 import { notFound } from "next/navigation";
-import { FileText, MessageCircle, PackageCheck, ShieldCheck } from "lucide-react";
-import { CategoryIcon } from "@/components/site/category-icon";
+import { FileText, MessageCircle, PackageCheck, Repeat2, ShieldCheck, Wrench } from "lucide-react";
+import { AddToCartForm } from "@/components/site/add-to-cart";
 import { PageHero } from "@/components/site/page-hero";
-import { availabilityOf, ProductCard } from "@/components/site/product-card";
+import { ProductGallery } from "@/components/site/product-gallery";
+import { availabilityOf, ProductCard, toCartProduct } from "@/components/site/product-card";
 import { SectionHeading } from "@/components/site/section";
 import { ButtonLink } from "@/components/ui/button";
 import { whatsappLink } from "@/config/site";
 import { cn, formatTND, withVat } from "@/lib/utils";
-import { getCategories, getPrerenderedProductSlugs, getProduct } from "@/server/catalog";
+import { getCategories, getPrerenderedProductSlugs, getProduct, type ProductCardData } from "@/server/catalog";
 
 export async function generateStaticParams() {
   const rows = await getPrerenderedProductSlugs();
@@ -29,6 +30,7 @@ export default async function ProductPage({ params }: PageProps<"/produits/[slug
   const icon = categories.find((c) => c.slug === p.categorySlug)?.icon;
   const iconOf = new Map(categories.map((c) => [c.slug, c.icon]));
   const stock = availabilityOf(p);
+  const qty = Number(p.available);
   const price = p.salePrice ? withVat(p.salePrice, p.vatRate) : null;
   const wa = whatsappLink(`Bonjour SOGER, je suis intéressé par : ${p.name} (réf. ${p.sku}).`);
   const crumbs = [
@@ -40,21 +42,16 @@ export default async function ProductPage({ params }: PageProps<"/produits/[slug
     <>
       <PageHero title={p.name} crumbs={crumbs} />
       <section className="container-soger grid gap-10 py-10 lg:grid-cols-2 lg:py-14">
-        {/* Visuel (galerie + zoom complets en phase 5) */}
-        <div className="relative aspect-square overflow-hidden rounded-[var(--radius-card)] border border-line bg-gradient-to-br from-mist to-white">
-          {p.images[0] ? (
-            <Image src={p.images[0].url} alt={p.images[0].alt ?? p.name} fill priority sizes="(min-width: 1024px) 50vw, 100vw" className="object-contain p-8" />
-          ) : (
-            <div className="grid h-full place-items-center"><CategoryIcon name={icon} className="size-28 text-steel/30" /></div>
-          )}
-        </div>
+        <ProductGallery images={p.images} name={p.name} icon={icon} />
 
         <div>
           <p className="text-sm font-semibold tracking-wide text-steel uppercase">{p.brandName}</p>
-          <dl className="mt-4 grid grid-cols-2 gap-x-6 gap-y-2 text-sm">
+          <dl className="mt-4 grid grid-cols-[auto_1fr] gap-x-8 gap-y-2 text-sm">
             <dt className="text-steel">Référence SOGER</dt><dd className="font-mono font-medium">{p.sku}</dd>
             {p.manufacturerRef && (<><dt className="text-steel">Réf. fabricant</dt><dd className="font-mono font-medium">{p.manufacturerRef}</dd></>)}
-            {p.categoryName && (<><dt className="text-steel">Catégorie</dt><dd>{p.categoryName}</dd></>)}
+            {p.categoryName && (
+              <><dt className="text-steel">Catégorie</dt><dd><Link href={`/categories/${p.categorySlug}`} className="hover:text-accent">{p.categoryName}</Link></dd></>
+            )}
           </dl>
 
           <div className="mt-8 rounded-[var(--radius-card)] border border-line bg-mist/50 p-5">
@@ -62,27 +59,34 @@ export default async function ProductPage({ params }: PageProps<"/produits/[slug
               {price !== null ? (
                 <div>
                   <p className="font-display text-3xl font-bold">{formatTND(price)}</p>
-                  <p className="text-xs text-steel">TTC / {p.unit} · {formatTND(p.salePrice)} HT</p>
+                  <p className="text-xs text-steel">TTC / {p.unit} · {formatTND(p.salePrice)} HT · TVA {Number(p.vatRate)} %</p>
                 </div>
               ) : (
                 <p className="text-lg font-semibold text-steel">Prix sur devis</p>
               )}
-              <span className={cn("rounded-full px-3 py-1 text-xs font-medium", stock.tone)}>{stock.label}</span>
+              <span className={cn("rounded-full px-3 py-1 text-xs font-medium", stock.tone)}>
+                {stock.label}
+                {qty > 0 && qty <= Number(p.minStock) && ` · ${qty} restant${qty > 1 ? "s" : ""}`}
+              </span>
             </div>
-            <div className="mt-5 flex flex-col gap-2.5 sm:flex-row">
-              <ButtonLink href={`/devis?produit=${encodeURIComponent(p.sku)}`} size="lg" className="flex-1">
-                <FileText /> Demander un devis
-              </ButtonLink>
-              {wa && (
-                <ButtonLink href={wa} target="_blank" rel="noopener" variant="outline" size="lg" className="flex-1">
-                  <MessageCircle /> WhatsApp
+
+            <div className="mt-5 space-y-2.5">
+              {price !== null && <AddToCartForm product={toCartProduct(p, icon)} />}
+              <div className="flex flex-col gap-2.5 sm:flex-row">
+                <ButtonLink href={`/devis?produit=${encodeURIComponent(p.sku)}`} variant={price !== null ? "outline" : "primary"} size="lg" className="flex-1">
+                  <FileText /> Demander un devis
                 </ButtonLink>
-              )}
+                {wa && (
+                  <ButtonLink href={wa} target="_blank" rel="noopener" variant="outline" size="lg" className="flex-1">
+                    <MessageCircle /> WhatsApp
+                  </ButtonLink>
+                )}
+              </div>
             </div>
-            <p className="mt-3 text-xs text-steel">Le panier et la commande en ligne arrivent dans la prochaine étape.</p>
+            {qty <= 0 && <p className="mt-3 text-xs text-steel">Produit sur commande : le délai vous est confirmé avec votre devis.</p>}
           </div>
 
-          {p.shortDescription && <p className="mt-8 leading-relaxed text-graphite">{p.description ?? p.shortDescription}</p>}
+          {(p.description ?? p.shortDescription) && <p className="mt-8 leading-relaxed text-graphite">{p.description ?? p.shortDescription}</p>}
 
           <ul className="mt-6 flex flex-wrap gap-x-6 gap-y-2 text-sm text-steel">
             <li className="flex items-center gap-2"><ShieldCheck className="size-4 text-accent" /> Produit de marque</li>
@@ -94,9 +98,9 @@ export default async function ProductPage({ params }: PageProps<"/produits/[slug
       {p.attributes.length > 0 && (
         <section className="container-soger pb-12">
           <h2 className="text-xl font-bold">Caractéristiques techniques</h2>
-          <dl className="mt-5 overflow-hidden rounded-[var(--radius-card)] border border-line">
+          <dl className="mt-5 grid overflow-hidden rounded-[var(--radius-card)] border border-line md:grid-cols-2">
             {p.attributes.map((a, i) => (
-              <div key={a.label} className={cn("grid grid-cols-2 gap-4 px-5 py-3 text-sm", i % 2 ? "bg-white" : "bg-mist/60")}>
+              <div key={a.key + i} className="-mb-px grid grid-cols-2 gap-4 border-b border-line px-5 py-3 text-sm md:odd:border-r">
                 <dt className="text-steel">{a.label}</dt>
                 <dd className="font-medium">{a.value}{a.unit ? ` ${a.unit}` : ""}</dd>
               </div>
@@ -105,16 +109,54 @@ export default async function ProductPage({ params }: PageProps<"/produits/[slug
         </section>
       )}
 
-      {p.related.length > 0 && (
+      <RelatedSection
+        title="Produits équivalents"
+        description="Même dimensions et usage, autres marques : utile en cas de rupture."
+        icon={<Repeat2 className="size-5" />}
+        items={p.equivalents}
+        iconOf={iconOf}
+      />
+      <RelatedSection
+        title="Produits compatibles"
+        description="Pièces et consommables à prévoir avec ce produit."
+        icon={<Wrench className="size-5" />}
+        items={p.compatibles}
+        iconOf={iconOf}
+      />
+      {p.similar.length > 0 && (
         <section className="border-t border-line bg-mist/60 py-12">
           <div className="container-soger">
             <SectionHeading title="Produits similaires" href={p.categorySlug ? `/categories/${p.categorySlug}` : undefined} />
             <div className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-              {p.related.map((r) => <ProductCard key={r.id} product={r} icon={iconOf.get(r.categorySlug ?? "")} />)}
+              {p.similar.map((r) => <ProductCard key={r.id} product={r} icon={iconOf.get(r.categorySlug ?? "")} />)}
             </div>
           </div>
         </section>
       )}
     </>
+  );
+}
+
+function RelatedSection({ title, description, icon, items, iconOf }: {
+  title: string;
+  description: string;
+  icon: React.ReactNode;
+  items: ProductCardData[];
+  iconOf: Map<string, string | null>;
+}) {
+  if (!items.length) return null;
+  return (
+    <section className="container-soger pb-12">
+      <div className="flex items-center gap-3">
+        <span className="grid size-10 place-items-center rounded-xl bg-accent-soft text-accent-hover">{icon}</span>
+        <div>
+          <h2 className="text-xl font-bold">{title}</h2>
+          <p className="text-sm text-steel">{description}</p>
+        </div>
+      </div>
+      <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        {items.map((r) => <ProductCard key={r.id} product={r} icon={iconOf.get(r.categorySlug ?? "")} />)}
+      </div>
+    </section>
   );
 }

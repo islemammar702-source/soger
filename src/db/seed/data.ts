@@ -75,6 +75,8 @@ const bearing = (d: number, D: number, B: number): Attr[] => [
 
 export const DEMO_PRODUCTS: DemoProduct[] = [
   { sku: "SG-RL-6205-2RS", mref: "6205-2RSH", name: "Roulement à billes 6205-2RS", short: "Roulement rigide à une rangée de billes, double étanchéité.", category: "roulements", brand: "skf", purchase: 9.8, sale: 16.5, pro: 13.9, stock: 140, min: 30, featured: true, attrs: [...bearing(25, 52, 15), ["sealing", "Étanchéité", "2RS (joints caoutchouc)"]] },
+  { sku: "SG-RL-6205-2RS-N", mref: "6205DDU", name: "Roulement à billes 6205-2RS NSK", short: "Équivalent NSK du 6205-2RS, double joint caoutchouc.", category: "roulements", brand: "nsk", purchase: 9.1, sale: 15.4, pro: 13, stock: 85, min: 20, attrs: [...bearing(25, 52, 15), ["sealing", "Étanchéité", "2RS (joints caoutchouc)"]] },
+  { sku: "SG-RL-6205-2RS-F", mref: "6205-2RSR", name: "Roulement à billes 6205-2RS FAG", short: "Équivalent FAG du 6205-2RS, double joint caoutchouc.", category: "roulements", brand: "fag", purchase: 9.5, sale: 15.9, pro: 13.4, stock: 0, min: 10, attrs: [...bearing(25, 52, 15), ["sealing", "Étanchéité", "2RS (joints caoutchouc)"]] },
   { sku: "SG-RL-6305-ZZ", mref: "6305-2Z", name: "Roulement à billes 6305-ZZ", short: "Roulement rigide, flasques métalliques, série moyenne.", category: "roulements", brand: "fag", purchase: 14.2, sale: 23.9, pro: 20.1, stock: 62, min: 20, attrs: [...bearing(25, 62, 17), ["sealing", "Étanchéité", "ZZ (flasques métal)"]] },
   { sku: "SG-RL-6008-2RS", mref: "6008DDU", name: "Roulement à billes 6008-2RS", short: "Série légère, faible encombrement radial.", category: "roulements", brand: "nsk", purchase: 12.4, sale: 20.8, pro: 17.5, stock: 48, min: 15, attrs: [...bearing(40, 68, 15), ["sealing", "Étanchéité", "2RS"]] },
   { sku: "SG-RL-22210-E", mref: "22210 E", name: "Roulement à rotule sur rouleaux 22210 E", short: "Supporte de fortes charges radiales et les désalignements.", category: "roulements", brand: "skf", purchase: 86, sale: 139, pro: 121, stock: 12, min: 4, featured: true, attrs: [...bearing(50, 90, 23), ["cage", "Cage", "Acier"]] },
@@ -114,4 +116,20 @@ export const DEMO_PRODUCTS: DemoProduct[] = [
   { sku: "SG-AG-ASP-SECT", name: "Asperseur sectoriel laiton 3/4\"", short: "Portée jusqu'à 15 m, réglage du secteur.", category: "irrigation", brand: "lowara", purchase: 17, sale: 28, pro: 24, stock: 44, min: 12 },
   { sku: "SG-AG-CARD-T4", name: "Cardan de transmission catégorie 4", short: "Arbre à cardan pour outils attelés, avec protection.", category: "accessoires-agricoles", brand: "skf", purchase: 310, sale: 480, pro: 425, stock: 3, min: 1 },
   { sku: "SG-AG-RL-MOYEU", name: "Moyeu de disque agricole complet", short: "Unité de roulement étanche pour herses et déchaumeurs.", category: "pieces-machines-agricoles", brand: "ntn-snr", purchase: 64, sale: 105, pro: 91, stock: 9, min: 4 },
+];
+
+/** Relations de démonstration : [référence, référence liée, type]. */
+export const DEMO_RELATIONS: [string, string, "equivalent" | "compatible" | "similar"][] = [
+  ["SG-RL-6205-2RS", "SG-RL-6205-2RS-N", "equivalent"],
+  ["SG-RL-6205-2RS", "SG-RL-6205-2RS-F", "equivalent"],
+  ["SG-RL-6205-2RS-N", "SG-RL-6205-2RS-F", "equivalent"],
+  ["SG-RL-6205-2RS", "SG-HU-GR-EP2", "compatible"],
+  ["SG-RL-6205-2RS", "SG-OU-EXT-3B", "compatible"],
+  ["SG-RL-6205-2RS", "SG-EM-CHAUF-TIH", "compatible"],
+  ["SG-PL-UCP205", "SG-HU-GR-EP2", "compatible"],
+  ["SG-CR-SPA1250", "SG-TR-POU-SPA-200", "compatible"],
+  ["SG-CH-08B1-5M", "SG-CH-PIG-08B-19", "compatible"],
+  ["SG-HY-DIST-4WE6", "SG-HU-HM46-20L", "compatible"],
+  ["SG-HY-DIST-4WE6", "SG-TU-FLEX-2SN12", "compatible"],
+  ["SG-PO-CM5-4", "SG-JM-MG1-25", "compatible"],
 ];

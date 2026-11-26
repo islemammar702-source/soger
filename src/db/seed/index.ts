@@ -12,7 +12,7 @@ import { Pool } from "pg";
 import * as s from "../schema";
 import { ALL_PERMISSIONS, ROLE_DEFINITIONS } from "../../lib/permissions";
 import { applyStockMovement } from "../../server/inventory";
-import { AGRICULTURAL_CATEGORIES, BRANDS, DEMO_PRODUCTS, INDUSTRIAL_CATEGORIES } from "./data";
+import { AGRICULTURAL_CATEGORIES, BRANDS, DEMO_PRODUCTS, DEMO_RELATIONS, INDUSTRIAL_CATEGORIES } from "./data";
 
 const slugify = (v: string) =>
   v.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase()
@@ -121,6 +121,17 @@ async function main() {
       }
     }
     console.log(`Produits de démo ajoutés : ${DEMO_PRODUCTS.length - existing.size}`);
+
+    // Produits équivalents / compatibles
+    const idBySku = new Map(
+      (await tx.select({ id: s.products.id, sku: s.products.sku }).from(s.products)
+        .where(inArray(s.products.sku, DEMO_RELATIONS.flatMap(([a, b]) => [a, b])))).map((r) => [r.sku, r.id]),
+    );
+    const relations = DEMO_RELATIONS.filter(([a, b]) => idBySku.has(a) && idBySku.has(b)).map(([a, b, kind]) => ({
+      productId: idBySku.get(a)!, relatedProductId: idBySku.get(b)!, kind,
+    }));
+    if (relations.length) await tx.insert(s.productEquivalents).values(relations).onConflictDoNothing();
+    console.log(`Relations entre produits : ${relations.length}`);
   });
 
   console.log("Seed terminé.");
