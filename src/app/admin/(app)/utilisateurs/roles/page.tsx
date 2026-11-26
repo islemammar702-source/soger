@@ -58,3 +58,6 @@ export default async function RolesPage({ searchParams }: PageProps<"/admin/util
     </>
   );
 }
+
+/** Back-office : données toujours lues à la requête (stock, paiements…) ; la navigation peut attendre le serveur, un écran de chargement s’affiche. */
+export const instant = false;

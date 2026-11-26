@@ -74,3 +74,6 @@ export default async function CountPage({ params, searchParams }: PageProps<"/ad
     </>
   );
 }
+
+/** Back-office : données toujours lues à la requête (stock, paiements…) ; la navigation peut attendre le serveur, un écran de chargement s’affiche. */
+export const instant = false;

@@ -18,3 +18,6 @@ async function Denied({ searchParams }: { searchParams: PageProps<"/admin/acces-
 export default function DeniedPage({ searchParams }: PageProps<"/admin/acces-refuse">) {
   return <Denied searchParams={searchParams} />;
 }
+
+/** Back-office : données toujours lues à la requête (stock, paiements…) ; la navigation peut attendre le serveur, un écran de chargement s’affiche. */
+export const instant = false;
