@@ -29,3 +29,6 @@ export function slugify(v: string) {
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/(^-|-$)/g, "");
 }
+
+/** Arrondi à 2 décimales : coordonnées SVG identiques côté serveur et navigateur. */
+export const round2 = (n: number) => Math.round(n * 100) / 100;

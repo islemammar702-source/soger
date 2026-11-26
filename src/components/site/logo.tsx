@@ -1,11 +1,11 @@
 import Link from "next/link";
-import { cn } from "@/lib/utils";
+import { cn, round2 } from "@/lib/utils";
 
 /** Emblème SOGER : bague de roulement stylisée, 8 billes. */
 export function LogoMark({ className }: { className?: string }) {
   const balls = Array.from({ length: 8 }, (_, i) => {
     const a = (i / 8) * Math.PI * 2;
-    return { cx: 20 + Math.cos(a) * 12.5, cy: 20 + Math.sin(a) * 12.5 };
+    return { cx: round2(20 + Math.cos(a) * 12.5), cy: round2(20 + Math.sin(a) * 12.5) };
   });
   return (
     <svg viewBox="0 0 40 40" aria-hidden className={cn("size-9", className)}>

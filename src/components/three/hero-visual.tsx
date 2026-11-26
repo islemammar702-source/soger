@@ -2,7 +2,7 @@
 
 import dynamic from "next/dynamic";
 import { useEffect, useState } from "react";
-import { cn } from "@/lib/utils";
+import { cn, round2 } from "@/lib/utils";
 import type { SceneQuality } from "./bearing-scene";
 
 // Three.js n'est téléchargé que si l'appareil peut l'afficher.
@@ -50,7 +50,8 @@ export function HeroVisual({ className }: { className?: string }) {
 export function BearingPoster({ className }: { className?: string }) {
   const balls = Array.from({ length: 11 }, (_, i) => {
     const a = (i / 11) * Math.PI * 2;
-    return { cx: 200 + Math.cos(a) * 112, cy: 200 + Math.sin(a) * 112 * 0.55 };
+    // Arrondi : Node et le navigateur peuvent différer sur la dernière décimale (erreur d’hydratation).
+    return { cx: round2(200 + Math.cos(a) * 112), cy: round2(200 + Math.sin(a) * 112 * 0.55) };
   });
   return (
     <svg viewBox="0 0 400 400" aria-hidden className={cn("h-full w-full max-w-[520px]", className)}>
