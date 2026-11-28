@@ -1,7 +1,9 @@
+import Link from "next/link";
+import { qcol } from "@/db/qcol";
 import { asc, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { categories, products } from "@/db/schema";
-import { Card, Flash, PageHeader, Table, Td, Th } from "@/components/admin/ui";
+import { btn, Card, Flash, PageHeader, Table, Td, Th } from "@/components/admin/ui";
 import { deleteCategoryAction, saveCategoryAction } from "@/server/admin/products";
 import { requireStaff } from "@/server/auth/dal";
 
@@ -11,10 +13,12 @@ export default async function CategoriesPage({ searchParams }: PageProps<"/admin
   const me = await requireStaff("categories.view");
   const sp = await searchParams;
   const rows = await db
-    .select({ c: categories, count: sql<number>`(select count(*)::int from ${products} p where p.category_id = ${categories.id})` })
+    .select({ c: categories, count: sql<number>`(select count(*)::int from ${products} p where p.category_id = ${qcol(categories.id)})` })
     .from(categories)
     .orderBy(asc(categories.sector), asc(categories.sortOrder));
   const canEdit = me.can("categories.update");
+  const delId = Number(sp.supprimer) || 0;
+  const pending = me.can("categories.delete") ? rows.find(({ c, count }) => c.id === delId && count > 0) : undefined;
   const row = (c?: typeof categories.$inferSelect, count?: number) => (
     <tr key={c?.id ?? "new"} className="align-top">
       <Td colSpan={7} className="p-0">
@@ -42,6 +46,28 @@ export default async function CategoriesPage({ searchParams }: PageProps<"/admin
     <>
       <PageHeader title="Catégories" description="Ordre d'affichage, secteur (industrie / agriculture) et icône (nom Lucide, ex. CircleDot, Cog, Waves)." />
       <Flash sp={sp} />
+      {pending && (
+        <Card className="mb-4 border-red-200">
+          <form action={deleteCategoryAction} className="space-y-3">
+            <input type="hidden" name="id" value={pending.c.id} />
+            <p className="text-sm text-ink">
+              <strong>{pending.count} produit(s)</strong> sont rattachés à la catégorie « <strong>{pending.c.name}</strong> ». Pour la
+              supprimer, choisissez la catégorie qui recevra ces produits :
+            </p>
+            <div className="flex flex-wrap items-center gap-2">
+              <select name="transferTo" required defaultValue="" className={input + " max-w-xs"} data-testid="transfer-to">
+                <option value="" disabled>Transférer vers…</option>
+                {rows.filter(({ c }) => c.id !== pending.c.id).map(({ c }) => (
+                  <option key={c.id} value={c.id}>{c.name} ({c.sector === "industrial" ? "Industrie" : "Agriculture"})</option>
+                ))}
+              </select>
+              <button className={btn.danger}>Transférer et supprimer</button>
+              <Link href="/admin/categories" className={btn.outline}>Annuler</Link>
+            </div>
+            <p className="text-xs text-steel">Sinon, décochez « Active » pour simplement masquer la catégorie sur le site.</p>
+          </form>
+        </Card>
+      )}
       <Card padded={false}>
         <Table minWidth={1100}>
           <thead><tr><Th>Nom</Th><Th>Slug</Th><Th>Secteur</Th><Th>Description</Th><Th>Icône</Th><Th>Ordre</Th><Th /></tr></thead>

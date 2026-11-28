@@ -1,4 +1,5 @@
 import { asc, eq, sql } from "drizzle-orm";
+import { qcol } from "@/db/qcol";
 import type { NextRequest } from "next/server";
 import { db } from "@/db";
 import { brands, categories, products, stock } from "@/db/schema";
@@ -24,7 +25,7 @@ export async function GET(request: NextRequest) {
           .select({
             sku: products.sku, name: products.name, mref: products.manufacturerRef, barcode: products.barcode, brand: brands.name, category: categories.name, unit: products.unit,
             purchase: products.purchasePrice, sale: products.salePrice, pro: products.proPrice, vat: products.vatRate,
-            onHand: sql<string>`coalesce((select sum(s.quantity_on_hand) from ${stock} s where s.product_id = ${products.id}), 0)`,
+            onHand: sql<string>`coalesce((select sum(s.quantity_on_hand) from ${stock} s where s.product_id = ${qcol(products.id)}), 0)`,
             min: products.minStock, short: products.shortDescription, status: products.status,
           })
           .from(products)

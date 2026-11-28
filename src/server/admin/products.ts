@@ -484,15 +484,32 @@ export async function saveCategoryAction(form: FormData) {
   redirect("/admin/categories?ok=Catégorie enregistrée");
 }
 
+/**
+ * Suppression d'une catégorie. Si des produits y sont rattachés, on demande
+ * d'abord vers quelle catégorie les transférer (champ « transferTo »), puis
+ * transfert + suppression dans une seule transaction.
+ */
 export async function deleteCategoryAction(form: FormData) {
   const me = await assertStaff("categories.delete");
   const id = Number(form.get("id"));
+  const target = Number(form.get("transferTo")) || null;
   const [{ n }] = await db.select({ n: sql<number>`count(*)::int` }).from(products).where(eq(products.categoryId, id));
-  if (n > 0) redirect(`/admin/categories?erreur=${encodeURIComponent(`Impossible : ${n} produit(s) sont rattachés à cette catégorie. Désactivez-la plutôt.`)}`);
-  await db.delete(categories).where(eq(categories.id, id));
-  await audit({ userId: me.id, module: "categories", action: "delete", entityType: "category", entityId: id });
+  if (n > 0 && !me.can("products.update")) redirect(`/admin/categories?erreur=${encodeURIComponent(`Impossible : ${n} produit(s) sont rattachés à cette catégorie et vous n'avez pas le droit de modifier les produits.`)}`);
+  if (n > 0 && !target) redirect(`/admin/categories?supprimer=${id}`);
+  if (target === id) redirect(`/admin/categories?supprimer=${id}&erreur=${encodeURIComponent("Choisissez une autre catégorie.")}`);
+  if (target) {
+    const [t] = await db.select({ id: categories.id }).from(categories).where(eq(categories.id, target));
+    if (!t) redirect(`/admin/categories?supprimer=${id}&erreur=${encodeURIComponent("Catégorie de destination introuvable.")}`);
+  }
+  await db.transaction(async (tx) => {
+    if (target) {
+      await tx.update(products).set({ categoryId: target, updatedAt: new Date() }).where(eq(products.categoryId, id));
+    }
+    await tx.delete(categories).where(eq(categories.id, id));
+    await audit({ userId: me.id, module: "categories", action: "delete", entityType: "category", entityId: id, newValues: target ? { productsMovedTo: target, count: n } : undefined }, tx);
+  });
   refreshCatalog();
-  redirect("/admin/categories?ok=Catégorie supprimée");
+  redirect(`/admin/categories?ok=${encodeURIComponent(n ? `Catégorie supprimée — ${n} produit(s) transféré(s).` : "Catégorie supprimée")}`);
 }
 
 const brandSchema = z.object({
@@ -522,13 +539,32 @@ export async function saveBrandAction(form: FormData) {
   redirect("/admin/marques?ok=Marque enregistrée");
 }
 
+/**
+ * Suppression d'une marque. Si des produits l'utilisent, on demande d'abord
+ * vers quelle marque les transférer (ou « sans marque »), puis transfert +
+ * suppression dans une seule transaction.
+ */
 export async function deleteBrandAction(form: FormData) {
   const me = await assertStaff("brands.delete");
   const id = Number(form.get("id"));
+  const choice = String(form.get("transferTo") ?? "");
+  const target = choice === "none" ? null : Number(choice) || undefined;
   const [{ n }] = await db.select({ n: sql<number>`count(*)::int` }).from(products).where(eq(products.brandId, id));
-  if (n > 0) redirect(`/admin/marques?erreur=${encodeURIComponent(`Impossible : ${n} produit(s) utilisent cette marque. Désactivez-la plutôt.`)}`);
-  await db.delete(brands).where(eq(brands.id, id));
-  await audit({ userId: me.id, module: "brands", action: "delete", entityType: "brand", entityId: id });
+  if (n > 0 && !me.can("products.update")) redirect(`/admin/marques?erreur=${encodeURIComponent(`Impossible : ${n} produit(s) utilisent cette marque et vous n'avez pas le droit de modifier les produits.`)}`);
+  if (n > 0 && target === undefined) redirect(`/admin/marques?supprimer=${id}`);
+  if (target === id) redirect(`/admin/marques?supprimer=${id}&erreur=${encodeURIComponent("Choisissez une autre marque.")}`);
+  if (target) {
+    const [t] = await db.select({ id: brands.id }).from(brands).where(eq(brands.id, target));
+    if (!t) redirect(`/admin/marques?supprimer=${id}&erreur=${encodeURIComponent("Marque de destination introuvable.")}`);
+  }
+  await db.transaction(async (tx) => {
+    if (n > 0) {
+      await tx.update(products).set({ brandId: target ?? null, updatedAt: new Date() }).where(eq(products.brandId, id));
+    }
+    await tx.delete(brands).where(eq(brands.id, id));
+    await audit({ userId: me.id, module: "brands", action: "delete", entityType: "brand", entityId: id, newValues: n ? { productsMovedTo: target ?? null, count: n } : undefined }, tx);
+  });
   updateTag("brands");
-  redirect("/admin/marques?ok=Marque supprimée");
+  refreshCatalog();
+  redirect(`/admin/marques?ok=${encodeURIComponent(n ? `Marque supprimée — ${n} produit(s) transféré(s).` : "Marque supprimée")}`);
 }

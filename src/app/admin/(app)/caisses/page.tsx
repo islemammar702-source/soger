@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { qcol } from "@/db/qcol";
 import { desc, eq, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { cashRegisters, cashSessions, orders, users } from "@/db/schema";
@@ -11,7 +12,7 @@ import { requireStaff } from "@/server/auth/dal";
 export default async function SessionsPage() {
   await requireStaff("pos.close_register");
   const rows = await db
-    .select({ s: cashSessions, register: cashRegisters.name, user: users.name, sales: sql<string>`(select coalesce(sum(total), 0) from ${orders} o where o.cash_session_id = ${cashSessions.id} and o.status <> 'cancelled')` })
+    .select({ s: cashSessions, register: cashRegisters.name, user: users.name, sales: sql<string>`(select coalesce(sum(total), 0) from ${orders} o where o.cash_session_id = ${qcol(cashSessions.id)} and o.status <> 'cancelled')` })
     .from(cashSessions)
     .innerJoin(cashRegisters, eq(cashRegisters.id, cashSessions.cashRegisterId))
     .leftJoin(users, eq(users.id, cashSessions.openedBy))

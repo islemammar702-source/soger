@@ -1,4 +1,5 @@
 import "server-only";
+import { qcol } from "@/db/qcol";
 import { and, desc, eq, ilike, isNull, or, sql, type SQL } from "drizzle-orm";
 import { db } from "@/db";
 import { cashRegisters, cashSessions, customers, expenses, invoices, orderItems, orders, payments, users } from "@/db/schema";
@@ -167,7 +168,7 @@ export async function listStoreSales(f: { q?: string; from?: string; to?: string
         customerId: orders.customerId,
         party: sql<string | null>`coalesce(${customers.companyName}, nullif(concat_ws(' ', ${customers.firstName}, ${customers.lastName}), ''))`,
         phone: customers.phone,
-        items: sql<number>`(select count(*)::int from ${orderItems} oi where oi.order_id = ${orders.id})`,
+        items: sql<number>`(select count(*)::int from ${orderItems} oi where oi.order_id = ${qcol(orders.id)})`,
         total: saleTotal,
         paid: salePaid,
         invoiceNumber: invoices.number,

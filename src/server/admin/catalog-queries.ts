@@ -1,4 +1,5 @@
 import "server-only";
+import { qcol } from "@/db/qcol";
 import { and, asc, desc, eq, ilike, or, sql, type SQL } from "drizzle-orm";
 import { db } from "@/db";
 import { brands, categories, productAttributes, productEquivalents, productImages, products, stock, warehouses } from "@/db/schema";
@@ -6,8 +7,8 @@ import { brands, categories, productAttributes, productEquivalents, productImage
 export const ADMIN_PAGE_SIZE = 50;
 const esc = (v: string) => v.replace(/[\\%_]/g, (c) => `\\${c}`);
 
-export const availableExpr = sql<string>`coalesce((select sum(s.quantity_on_hand - s.quantity_reserved) from ${stock} s where s.product_id = ${products.id}), 0)`;
-export const onHandExpr = sql<string>`coalesce((select sum(s.quantity_on_hand) from ${stock} s where s.product_id = ${products.id}), 0)`;
+export const availableExpr = sql<string>`coalesce((select sum(s.quantity_on_hand - s.quantity_reserved) from ${stock} s where s.product_id = ${qcol(products.id)}), 0)`;
+export const onHandExpr = sql<string>`coalesce((select sum(s.quantity_on_hand) from ${stock} s where s.product_id = ${qcol(products.id)}), 0)`;
 
 /** Dépôt principal (stock saisi depuis la fiche produit). */
 export async function getDefaultWarehouse() {
@@ -43,7 +44,7 @@ export async function listAdminProducts(f: { q?: string; category?: number; bran
         salePrice: products.salePrice,
         proPrice: products.proPrice,
         manufacturerRef: products.manufacturerRef,
-        imageUrl: sql<string | null>`(select i.url from ${productImages} i where i.product_id = ${products.id} order by i.is_primary desc, i.sort_order limit 1)`,
+        imageUrl: sql<string | null>`(select i.url from ${productImages} i where i.product_id = ${qcol(products.id)} order by i.is_primary desc, i.sort_order limit 1)`,
         vatRate: products.vatRate,
         minStock: products.minStock,
         unit: products.unit,

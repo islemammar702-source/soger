@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { qcol } from "@/db/qcol";
 import { Plus } from "lucide-react";
 import { and, asc, ilike, or, sql, type SQL } from "drizzle-orm";
 import { db } from "@/db";
@@ -17,8 +18,8 @@ export default async function SuppliersPage({ searchParams }: PageProps<"/admin/
   const rows = await db
     .select({
       s: suppliers,
-      products: sql<number>`(select count(*)::int from ${productSuppliers} ps where ps.supplier_id = ${suppliers.id})`,
-      debt: sql<string>`coalesce((select sum(i.total - i.amount_paid) from ${invoices} i where i.supplier_id = ${suppliers.id} and i.kind = 'supplier' and i.status in ('issued','partially_paid')), 0)`,
+      products: sql<number>`(select count(*)::int from ${productSuppliers} ps where ps.supplier_id = ${qcol(suppliers.id)})`,
+      debt: sql<string>`coalesce((select sum(i.total - i.amount_paid) from ${invoices} i where i.supplier_id = ${qcol(suppliers.id)} and i.kind = 'supplier' and i.status in ('issued','partially_paid')), 0)`,
     })
     .from(suppliers)
     .where(and(...conds))

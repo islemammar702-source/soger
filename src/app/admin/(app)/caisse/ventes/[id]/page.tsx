@@ -1,4 +1,5 @@
 import Image from "next/image";
+import { qcol } from "@/db/qcol";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { and, asc, desc, eq, sql } from "drizzle-orm";
@@ -27,7 +28,7 @@ export default async function SalePage({ params, searchParams }: PageProps<"/adm
   if (!o) notFound();
   const [items, [c], pays, [inv], [seller], open] = await Promise.all([
     db
-      .select({ i: orderItems, mref: products.manufacturerRef, brand: brands.name, image: sql<string | null>`(select pi.url from ${productImages} pi where pi.product_id = ${orderItems.productId} order by pi.is_primary desc, pi.sort_order limit 1)` })
+      .select({ i: orderItems, mref: products.manufacturerRef, brand: brands.name, image: sql<string | null>`(select pi.url from ${productImages} pi where pi.product_id = ${qcol(orderItems.productId)} order by pi.is_primary desc, pi.sort_order limit 1)` })
       .from(orderItems)
       .leftJoin(products, eq(products.id, orderItems.productId))
       .leftJoin(brands, eq(brands.id, products.brandId))

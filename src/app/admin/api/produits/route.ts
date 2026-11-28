@@ -1,4 +1,5 @@
 import { and, eq, inArray, or, sql } from "drizzle-orm";
+import { qcol } from "@/db/qcol";
 import type { NextRequest } from "next/server";
 import { db } from "@/db";
 import { brands, customers, productImages, products, stock } from "@/db/schema";
@@ -43,11 +44,11 @@ export async function GET(request: NextRequest) {
       barcode: products.barcode,
       manufacturerRef: products.manufacturerRef,
       brand: brands.name,
-      imageUrl: sql<string | null>`(select i.url from ${productImages} i where i.product_id = ${products.id} order by i.is_primary desc, i.sort_order limit 1)`,
+      imageUrl: sql<string | null>`(select i.url from ${productImages} i where i.product_id = ${qcol(products.id)} order by i.is_primary desc, i.sort_order limit 1)`,
       unit: products.unit,
       vatRate: products.vatRate,
       purchasePrice: products.purchasePrice,
-      available: sql<string>`coalesce((select sum(s.quantity_on_hand - s.quantity_reserved) from ${stock} s where s.product_id = ${products.id}), 0)`,
+      available: sql<string>`coalesce((select sum(s.quantity_on_hand - s.quantity_reserved) from ${stock} s where s.product_id = ${qcol(products.id)}), 0)`,
     })
     .from(products)
     .leftJoin(brands, eq(brands.id, products.brandId))

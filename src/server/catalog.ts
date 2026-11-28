@@ -1,4 +1,5 @@
 import "server-only";
+import { qcol } from "@/db/qcol";
 import { and, asc, count, desc, eq, ilike, inArray, or, sql, type SQL } from "drizzle-orm";
 import { cacheLife, cacheTag } from "next/cache";
 import { db } from "@/db";
@@ -20,7 +21,7 @@ export async function getCategories(sector?: Sector) {
       icon: categories.icon,
       imageUrl: categories.imageUrl,
       sector: categories.sector,
-      productCount: sql<number>`(select count(*)::int from ${products} p where p.category_id = ${categories.id} and p.status = 'published' and p.is_active)`,
+      productCount: sql<number>`(select count(*)::int from ${products} p where p.category_id = ${qcol(categories.id)} and p.status = 'published' and p.is_active)`,
     })
     .from(categories)
     .where(and(eq(categories.isActive, true), sector ? eq(categories.sector, sector) : undefined))
@@ -51,7 +52,7 @@ export async function getBrands() {
 
 /* ─── Produits ─────────────────────────────────────────────────────── */
 
-const available = sql<string>`coalesce((select sum(s.quantity_on_hand - s.quantity_reserved) from ${stock} s where s.product_id = ${products.id}), 0)`;
+const available = sql<string>`coalesce((select sum(s.quantity_on_hand - s.quantity_reserved) from ${stock} s where s.product_id = ${qcol(products.id)}), 0)`;
 
 const cardColumns = {
   id: products.id,
@@ -70,7 +71,7 @@ const cardColumns = {
   categorySlug: categories.slug,
   categoryName: categories.name,
   available,
-  imageUrl: sql<string | null>`(select i.url from ${productImages} i where i.product_id = ${products.id} order by i.is_primary desc, i.sort_order limit 1)`,
+  imageUrl: sql<string | null>`(select i.url from ${productImages} i where i.product_id = ${qcol(products.id)} order by i.is_primary desc, i.sort_order limit 1)`,
 };
 
 export type ProductCardData = Awaited<ReturnType<typeof getFeaturedProducts>>[number];
@@ -196,7 +197,7 @@ export async function listProducts(f: CatalogFilters) {
   if (f.priceMax != null) conds.push(sql`${priceTTC} <= ${f.priceMax}`);
   if (f.inStock) conds.push(sql`${available} > 0`);
   for (const [key, [min, max]] of Object.entries(f.attrs ?? {})) {
-    conds.push(sql`exists (select 1 from ${productAttributes} a where a.product_id = ${products.id} and a.key = ${key}
+    conds.push(sql`exists (select 1 from ${productAttributes} a where a.product_id = ${qcol(products.id)} and a.key = ${key}
       ${min != null ? sql`and a.numeric_value >= ${min}` : sql``}
       ${max != null ? sql`and a.numeric_value <= ${max}` : sql``})`);
   }

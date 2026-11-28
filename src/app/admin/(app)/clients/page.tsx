@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { qcol } from "@/db/qcol";
 import { Plus } from "lucide-react";
 import { and, desc, eq, ilike, or, sql, type SQL } from "drizzle-orm";
 import { db } from "@/db";
@@ -29,7 +30,7 @@ export default async function CustomersPage({ searchParams }: PageProps<"/admin/
   const where = and(...conds);
   const [rows, [{ total }]] = await Promise.all([
     db
-      .select({ c: customers, balance: receivableExpr, orders: sql<number>`(select count(*)::int from ${orders} o where o.customer_id = ${customers.id})` })
+      .select({ c: customers, balance: receivableExpr, orders: sql<number>`(select count(*)::int from ${orders} o where o.customer_id = ${qcol(customers.id)})` })
       .from(customers)
       .where(where)
       .orderBy(desc(customers.createdAt))

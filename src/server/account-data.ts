@@ -1,4 +1,5 @@
 import "server-only";
+import { qcol } from "@/db/qcol";
 import { and, desc, eq, inArray, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { favorites, invoices, notifications, orderItems, orders, payments, quoteItems, quotes } from "@/db/schema";
@@ -31,7 +32,7 @@ export const getMyQuotes = (customerId: number) =>
       total: quotes.total,
       validUntil: quotes.validUntil,
       createdAt: quotes.createdAt,
-      lines: sql<number>`(select count(*)::int from ${quoteItems} qi where qi.quote_id = ${quotes.id})`,
+      lines: sql<number>`(select count(*)::int from ${quoteItems} qi where qi.quote_id = ${qcol(quotes.id)})`,
     })
     .from(quotes)
     .where(and(eq(quotes.customerId, customerId), inArray(quotes.status, ["sent", "accepted", "rejected", "expired", "converted"])))

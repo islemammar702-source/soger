@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { qcol } from "@/db/qcol";
 import { desc, eq, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { categories, stockCountItems, stockCounts, users, warehouses } from "@/db/schema";
@@ -16,7 +17,7 @@ export default async function CountsPage({ searchParams }: PageProps<"/admin/sto
   const sp = await searchParams;
   const [rows, whs, cats] = await Promise.all([
     db
-      .select({ c: stockCounts, warehouse: warehouses.name, user: users.name, lines: sql<number>`(select count(*)::int from ${stockCountItems} i where i.count_id = ${stockCounts.id})`, counted: sql<number>`(select count(*)::int from ${stockCountItems} i where i.count_id = ${stockCounts.id} and i.counted is not null)` })
+      .select({ c: stockCounts, warehouse: warehouses.name, user: users.name, lines: sql<number>`(select count(*)::int from ${stockCountItems} i where i.count_id = ${qcol(stockCounts.id)})`, counted: sql<number>`(select count(*)::int from ${stockCountItems} i where i.count_id = ${qcol(stockCounts.id)} and i.counted is not null)` })
       .from(stockCounts)
       .innerJoin(warehouses, eq(warehouses.id, stockCounts.warehouseId))
       .leftJoin(users, eq(users.id, stockCounts.createdBy))
