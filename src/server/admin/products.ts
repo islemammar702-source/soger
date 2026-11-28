@@ -492,10 +492,13 @@ export async function saveCategoryAction(form: FormData) {
 export async function deleteCategoryAction(form: FormData) {
   const me = await assertStaff("categories.delete");
   const id = Number(form.get("id"));
-  const target = Number(form.get("transferTo")) || null;
+  const choice = String(form.get("transferTo") ?? "");
+  // « archive » : la famille n'est plus vendue → produits archivés (retirés du site, gardés pour l'historique).
+  const archive = choice === "archive";
+  const target = archive ? null : Number(choice) || null;
   const [{ n }] = await db.select({ n: sql<number>`count(*)::int` }).from(products).where(eq(products.categoryId, id));
   if (n > 0 && !me.can("products.update")) redirect(`/admin/categories?erreur=${encodeURIComponent(`Impossible : ${n} produit(s) sont rattachés à cette catégorie et vous n'avez pas le droit de modifier les produits.`)}`);
-  if (n > 0 && !target) redirect(`/admin/categories?supprimer=${id}`);
+  if (n > 0 && !target && !archive) redirect(`/admin/categories?supprimer=${id}`);
   if (target === id) redirect(`/admin/categories?supprimer=${id}&erreur=${encodeURIComponent("Choisissez une autre catégorie.")}`);
   if (target) {
     const [t] = await db.select({ id: categories.id }).from(categories).where(eq(categories.id, target));
@@ -504,12 +507,14 @@ export async function deleteCategoryAction(form: FormData) {
   await db.transaction(async (tx) => {
     if (target) {
       await tx.update(products).set({ categoryId: target, updatedAt: new Date() }).where(eq(products.categoryId, id));
+    } else if (archive && n > 0) {
+      await tx.update(products).set({ categoryId: null, status: "archived", updatedAt: new Date() }).where(eq(products.categoryId, id));
     }
     await tx.delete(categories).where(eq(categories.id, id));
-    await audit({ userId: me.id, module: "categories", action: "delete", entityType: "category", entityId: id, newValues: target ? { productsMovedTo: target, count: n } : undefined }, tx);
+    await audit({ userId: me.id, module: "categories", action: "delete", entityType: "category", entityId: id, newValues: n ? (archive ? { productsArchived: n } : { productsMovedTo: target, count: n }) : undefined }, tx);
   });
   refreshCatalog();
-  redirect(`/admin/categories?ok=${encodeURIComponent(n ? `Catégorie supprimée — ${n} produit(s) transféré(s).` : "Catégorie supprimée")}`);
+  redirect(`/admin/categories?ok=${encodeURIComponent(!n ? "Catégorie supprimée" : archive ? `Catégorie supprimée — ${n} produit(s) archivé(s) et retiré(s) du site.` : `Catégorie supprimée — ${n} produit(s) transféré(s).`)}`);
 }
 
 const brandSchema = z.object({

@@ -52,16 +52,19 @@ export default async function CategoriesPage({ searchParams }: PageProps<"/admin
             <input type="hidden" name="id" value={pending.c.id} />
             <p className="text-sm text-ink">
               <strong>{pending.count} produit(s)</strong> sont rattachés à la catégorie « <strong>{pending.c.name}</strong> ». Pour la
-              supprimer, choisissez la catégorie qui recevra ces produits :
+              supprimer, choisissez ce que deviennent ces produits :
             </p>
             <div className="flex flex-wrap items-center gap-2">
               <select name="transferTo" required defaultValue="" className={input + " max-w-xs"} data-testid="transfer-to">
-                <option value="" disabled>Transférer vers…</option>
+                <option value="" disabled>Choisir…</option>
+                <option value="archive">Archiver les produits (famille plus vendue — retirés du site)</option>
+                <optgroup label="Ou transférer vers la catégorie :">
                 {rows.filter(({ c }) => c.id !== pending.c.id).map(({ c }) => (
                   <option key={c.id} value={c.id}>{c.name} ({c.sector === "industrial" ? "Industrie" : "Agriculture"})</option>
                 ))}
+                </optgroup>
               </select>
-              <button className={btn.danger}>Transférer et supprimer</button>
+              <button className={btn.danger}>Confirmer la suppression</button>
               <Link href="/admin/categories" className={btn.outline}>Annuler</Link>
             </div>
             <p className="text-xs text-steel">Sinon, décochez « Active » pour simplement masquer la catégorie sur le site.</p>
