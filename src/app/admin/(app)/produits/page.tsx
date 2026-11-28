@@ -1,11 +1,11 @@
 import Image from "next/image";
 import Link from "next/link";
-import { Copy, EyeOff, ImageOff, Plus, Send, Upload } from "lucide-react";
+import { Copy, EyeOff, ImageOff, Plus, Send, Trash2, Upload } from "lucide-react";
 import { BulkBar, SelectAll } from "@/components/admin/product-bulk";
 import { Card, EmptyRow, FilterBar, Flash, FilterSelect, PageHeader, Pagination, Table, Td, Th, btn, listHref, one } from "@/components/admin/ui";
 import { Badge } from "@/components/ui/badge";
 import { formatTND, isOptimizable } from "@/lib/utils";
-import { duplicateProductAction, setProductStatusAction } from "@/server/admin/products";
+import { countDeletableProducts, deleteAllProductsAction, duplicateProductAction, setProductStatusAction } from "@/server/admin/products";
 import { getBrandOptions, getCategoryOptions, listAdminProducts } from "@/server/admin/catalog-queries";
 import { requireStaff } from "@/server/auth/dal";
 
@@ -27,6 +27,8 @@ export default async function AdminProductsPage({ searchParams }: PageProps<"/ad
   const canEdit = me.can("products.update");
   const canPublish = me.can("products.publish");
   const back = listHref("/admin/produits", sp, { ok: undefined, erreur: undefined });
+  const canDelete = me.can("products.delete");
+  const purge = canDelete && one(sp["tout-supprimer"]) === "1" ? await countDeletableProducts() : null;
   return (
     <>
       <PageHeader
@@ -35,6 +37,7 @@ export default async function AdminProductsPage({ searchParams }: PageProps<"/ad
         actions={
           <>
             {me.can("products.import") && <Link href="/admin/import" className={btn.outline}><Upload className="size-4" /> Importer</Link>}
+            {canDelete && <Link href="/admin/produits?tout-supprimer=1" className={btn.danger} data-testid="delete-all"><Trash2 className="size-4" /> Tout supprimer</Link>}
             {me.can("products.create") && <Link href="/admin/produits/nouveau" className={btn.primary}><Plus className="size-4" /> Nouveau produit</Link>}
           </>
         }
@@ -47,6 +50,30 @@ export default async function AdminProductsPage({ searchParams }: PageProps<"/ad
         {one(sp.alerte) === "1" && <input type="hidden" name="alerte" value="1" />}
       </FilterBar>
       <Flash sp={sp} />
+      {purge && (
+        <Card className="mb-4 border-red-200">
+          {purge.total === 0 ? (
+            <p className="text-sm text-steel">Aucun produit à supprimer. <Link href="/admin/produits" className="underline">Retour</Link></p>
+          ) : (
+            <form action={deleteAllProductsAction} className="space-y-3">
+              <p className="text-base font-semibold text-danger">Supprimer tous les produits ({purge.total})</p>
+              <ul className="list-disc space-y-1 ps-5 text-sm text-ink">
+                <li><strong>{purge.deletable}</strong> produit(s) seront <strong>supprimés définitivement</strong> (fiche, photos, caractéristiques, stock).</li>
+                {purge.withHistory > 0 && (
+                  <li><strong>{purge.withHistory}</strong> produit(s) apparaissent dans des ventes, factures, devis ou achats : ils seront <strong>archivés</strong> (retirés du site et de la caisse) car ces documents doivent être conservés pour la comptabilité.</li>
+                )}
+                <li>Les catégories, marques, clients, ventes et factures ne sont pas touchés.</li>
+              </ul>
+              <p className="text-sm text-danger">Cette action est irréversible. Pour confirmer, tapez <strong>SUPPRIMER</strong> :</p>
+              <div className="flex flex-wrap items-center gap-2">
+                <input name="confirm" required autoComplete="off" placeholder="SUPPRIMER" className="h-10 w-48 rounded-lg border border-line px-3 text-sm" data-testid="confirm-delete" />
+                <button className={btn.danger}>Supprimer tous les produits</button>
+                <Link href="/admin/produits" className={btn.outline}>Annuler</Link>
+              </div>
+            </form>
+          )}
+        </Card>
+      )}
       {canEdit && <BulkBar back={back} canPublish={canPublish} categories={cats} brands={brands} />}
       <Card padded={false}>
         <Table minWidth={1100}>

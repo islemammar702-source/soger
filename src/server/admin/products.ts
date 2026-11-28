@@ -5,7 +5,7 @@ import { updateTag } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
 import { db } from "@/db";
-import { brands, categories, productAttributes, productEquivalents, productImages, products, stock, warehouses } from "@/db/schema";
+import { brands, categories, productAttributes, productEquivalents, productImages, products, stock, stockMovements, warehouses } from "@/db/schema";
 import { slugify } from "@/lib/utils";
 import { audit, diff } from "../audit";
 import { AccessDenied, assertStaff } from "../auth/dal";
@@ -317,6 +317,64 @@ export async function bulkProductsAction(form: FormData) {
   });
   refreshCatalog();
   redirect(withMsg(back, n ? "ok" : "erreur", n ? `${n} produit(s) modifié(s).` : "Aucun produit concerné par cette action."));
+}
+
+/* ─── Suppression de tous les produits ─────────────────────────────── */
+
+/**
+ * Un produit a un historique s'il figure dans une vente, une facture, un devis,
+ * un achat, une réception, un inventaire ou un mouvement de stock autre que le
+ * stock d'ouverture. Ceux-là ne peuvent pas être effacés (pièces comptables) :
+ * ils sont archivés et retirés du site.
+ */
+const hasHistory = sql`(
+  exists (select 1 from order_items x where x.product_id = "products"."id")
+  or exists (select 1 from invoice_items x where x.product_id = "products"."id")
+  or exists (select 1 from quote_items x where x.product_id = "products"."id")
+  or exists (select 1 from purchase_items x where x.product_id = "products"."id")
+  or exists (select 1 from goods_receipt_items x where x.product_id = "products"."id")
+  or exists (select 1 from stock_count_items x where x.product_id = "products"."id")
+  or exists (select 1 from stock_movements x where x.product_id = "products"."id" and x.type <> 'opening')
+)`;
+
+/** Combien de produits seraient effacés / archivés. */
+export async function countDeletableProducts() {
+  await assertStaff("products.delete");
+  const [r] = await db
+    .select({
+      total: sql<number>`count(*)::int`,
+      withHistory: sql<number>`count(*) filter (where ${hasHistory})::int`,
+    })
+    .from(products);
+  return { total: r.total, withHistory: r.withHistory, deletable: r.total - r.withHistory };
+}
+
+export async function deleteAllProductsAction(form: FormData) {
+  const me = await assertStaff("products.delete");
+  if (String(form.get("confirm") ?? "").trim().toUpperCase() !== "SUPPRIMER") {
+    redirect(`/admin/produits?tout-supprimer=1&erreur=${encodeURIComponent("Tapez SUPPRIMER pour confirmer.")}`);
+  }
+  const res = await db.transaction(async (tx) => {
+    const all = await tx.select({ id: products.id, sku: products.sku, name: products.name, history: sql<boolean>`${hasHistory}` }).from(products).for("update");
+    const keep = all.filter((p) => p.history).map((p) => p.id);
+    const del = all.filter((p) => !p.history).map((p) => p.id);
+    let files: { url: string; publicId: string | null }[] = [];
+    if (keep.length) {
+      await tx.update(products).set({ status: "archived", isActive: false, updatedAt: new Date() }).where(inArray(products.id, keep));
+    }
+    if (del.length) {
+      files = await tx.select({ url: productImages.url, publicId: productImages.publicId }).from(productImages).where(inArray(productImages.productId, del));
+      await tx.delete(stockMovements).where(and(inArray(stockMovements.productId, del), eq(stockMovements.type, "opening")));
+      await tx.delete(stock).where(inArray(stock.productId, del));
+      await tx.delete(products).where(inArray(products.id, del));
+    }
+    await audit({ userId: me.id, module: "products", action: "delete_all", entityType: "product", entityId: null, oldValues: { deleted: all.filter((p) => !p.history).map(({ id, sku, name }) => ({ id, sku, name })) }, newValues: { deleted: del.length, archived: keep.length } }, tx);
+    return { deleted: del.length, archived: keep.length, files };
+  });
+  for (const f of res.files) await releaseFile(f.url, f.publicId).catch(() => {});
+  refreshCatalog();
+  const msg = `${res.deleted} produit(s) supprimé(s)` + (res.archived ? ` — ${res.archived} produit(s) ayant des ventes, factures ou achats ont été archivés (retirés du site, conservés pour la comptabilité).` : ".");
+  redirect(`/admin/produits?ok=${encodeURIComponent(msg)}`);
 }
 
 /* ─── Images ───────────────────────────────────────────────────────── */
