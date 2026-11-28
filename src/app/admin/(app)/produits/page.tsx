@@ -66,7 +66,7 @@ export default async function AdminProductsPage({ searchParams }: PageProps<"/ad
               </ul>
               <p className="text-sm text-danger">Cette action est irréversible. Pour confirmer, tapez <strong>SUPPRIMER</strong> :</p>
               <div className="flex flex-wrap items-center gap-2">
-                <input name="confirm" required autoComplete="off" placeholder="SUPPRIMER" className="h-10 w-48 rounded-lg border border-line px-3 text-sm" data-testid="confirm-delete" />
+                <input name="confirm" required autoComplete="off" placeholder="Écrivez le mot ici…" aria-label="Tapez SUPPRIMER pour confirmer" title="Tapez SUPPRIMER pour confirmer" className="h-10 w-56 rounded-lg border-2 border-red-300 px-3 text-sm font-semibold uppercase placeholder:font-normal placeholder:normal-case focus:border-danger focus:outline-none" data-testid="confirm-delete" />
                 <button className={btn.danger}>Supprimer tous les produits</button>
                 <Link href="/admin/produits" className={btn.outline}>Annuler</Link>
               </div>
